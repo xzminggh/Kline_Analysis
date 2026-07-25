@@ -1,0 +1,265 @@
+{
+  "task": "Build the offline Android K-line strategy screening app (Expo + React Native + TypeScript): read the PC-generated SQLite K-line db, run 25 pure-OHLCV strategies post-market, score 1-5 stars via 3-layer filtering, and emit a rich searchable BUY/SELL recommendation report",
+  "loop_altitude": "medium",
+  "loop_altitude_rationale": "Single-agent, strictly sequential gated stages (each consumes the prior stage's stable artifact: db layer -> indicators -> signals -> report -> scheduling -> e2e). No independent fan-out work exists; reversible (all new local code, git-tracked, dual remote). Human reviews at each gate.",
+  "tech_stack": {
+    "framework": "Expo + React Native",
+    "language": "TypeScript",
+    "database": "expo-sqlite",
+    "ui": "React Native with Native Base / StyleSheet",
+    "testing": "Jest + React Native Testing Library",
+    "packaging": "Expo EAS Build (Android APK)",
+    "charts": "react-native-svg"
+  },
+  "selection_log": [
+    {
+      "decision": "D0",
+      "answer": "loop",
+      "why": "runnable checks exist per stage (npm run build, Jest unit tests against a python oracle, bigdemo e2e script exit code, export verifier) — done is machine-decidable without a human reading output"
+    },
+    {
+      "decision": "D1",
+      "answer": "staged (5 seams, 6 stages)",
+      "why": "stable checkable artifacts handed across each seam: schema-read db layer -> indicator outputs -> signal+star pool -> rendered report+export -> scheduled run+import -> e2e report; each seam gates the next"
+    },
+    {
+      "decision": "D2",
+      "answer": "plan_execute_verify x5 + review (qa)",
+      "why": "scaffold/indicators/strategy/report/schedule are risky structured builds needing mid-flight correction (plan_execute_verify); qa_integration is a correctness judgment on the whole artifact (review). checks assert OUTCOME against an independent python oracle, not a proxy"
+    },
+    {
+      "decision": "D3",
+      "answer": "in_the_loop",
+      "why": "user SOP requires confirming before file changes AND the financial-correctness check can pass-while-wrong (a wrong indicator value still builds green) — weakest check wins => human in at every gate"
+    },
+    {
+      "decision": "D4",
+      "answer": "medium",
+      "why": "stages are strictly sequential (each depends on the prior); no two stages are independent fan-out work"
+    },
+    {
+      "decision": "D5",
+      "answer": "caps + escalate, one loopback",
+      "why": "per-stage caps 3-4; on_failure escalates to human except qa_integration which loops back to strategy_engine when e2e reveals an engine contract bug (valid upstream ancestor). outer budget 4"
+    },
+    {
+      "decision": "D6",
+      "answer": "completeness_first",
+      "why": "iteration boundaries are expensive (npm build + context rebuild, slow) and checks are slow (bigdemo e2e ~minutes) => few long thorough passes: low caps, large per-stage scope, thorough full-suite+oracle checks, review at the few gates. re-tuned D2->plan_execute_verify, D3->in_the_loop, D5->low caps"
+    }
+  ],
+  "stages": [
+    {
+      "id": "scaffold",
+      "definition_of_done": {
+        "goal": "Expo + React Native + TypeScript project initialized; expo-sqlite reader opens the demo db and returns table list + kline_daily row count matching meta; git repo initialized with Gitee + GitHub remotes and an initial commit pushed",
+        "machine_verifiable": true
+      },
+      "loop_pattern": "plan_execute_verify",
+      "feedback_signal": {
+        "check": "npm run build && python3 scripts/verify_schema.py --db kline_1y_smalldemo.sqlite",
+        "expect": "pass",
+        "falsifiable_when": "the SQLite DB reader cannot open the demo db or returns 0 rows for kline_daily while meta reports 288 stocks — verify_schema.py exits non-zero",
+        "passing_but_wrong": "npm run build is green but the DB import path is stubbed (returns a hardcoded list) — ruled out: verify_schema.py opens the real db and asserts table presence + row-count parity with meta, failing on a stub"
+      },
+      "stop_conditions": {
+        "failure": [
+          "npm / Expo environment cannot produce a green build (toolchain broken, not our code)"
+        ],
+        "max_iterations": 3,
+        "on_failure": {
+          "action": "escalate"
+        }
+      },
+      "depends_on": []
+    },
+    {
+      "id": "indicators",
+      "definition_of_done": {
+        "goal": "MA/EMA/RSI/MACD/BOLL/ATR/CCI/MOM/ROC implemented in TypeScript; values match scripts/indicator_oracle.py within 1e-6 on fixed fixtures; bigdemo precompute completes in bounded time using async/await + pagination (no main-thread block)",
+        "machine_verifiable": true
+      },
+      "loop_pattern": "plan_execute_verify",
+      "feedback_signal": {
+        "check": "npm test -- --testPathPattern='IndicatorTest'",
+        "expect": "pass",
+        "falsifiable_when": "an indicator returns a wrong value for a hand-computed vector (e.g. RSI(14) on a known 15-bar series, or EMA smoothing) — the test asserts exact values and goes red",
+        "passing_but_wrong": "the test only asserts the function returns a non-null number[] of length==N (shape check) — ruled out: IndicatorTest asserts exact values against scripts/indicator_oracle.py output within 1e-6 tolerance for RSI/MACD/BOLL/ATR on fixed fixtures"
+      },
+      "stop_conditions": {
+        "failure": [
+          "3 consecutive same-type failures",
+          "indicator math diverges from oracle beyond 1e-6 on more than one fixture"
+        ],
+        "max_iterations": 4,
+        "on_failure": {
+          "action": "escalate"
+        }
+      },
+      "depends_on": [
+        "scaffold"
+      ]
+    },
+    {
+      "id": "strategy_engine",
+      "definition_of_done": {
+        "goal": "All 25 strategies implemented; signal pool (stock/strategy/direction/triggerDay/triggerPrice) produced; 3-layer filter assigns 1-5 stars per star_thresholds; stop_loss = max(triggerDayLow, MA20); outputs match scripts/strategy_oracle.py on a 12-stock sample covering all 8 groups",
+        "machine_verifiable": true
+      },
+      "loop_pattern": "plan_execute_verify",
+      "feedback_signal": {
+        "check": "npm test -- --testPathPattern='StrategyTest'",
+        "expect": "pass",
+        "falsifiable_when": "a strategy misfires (e.g. T01 golden-cross reported on a death-cross day) or star rating violates star_thresholds — StrategyTest asserts direction+triggered per sampled stock against the oracle and goes red",
+        "passing_but_wrong": "the test only asserts the signal pool is non-empty (count>0) — ruled out: StrategyTest asserts per-strategy direction and triggered-day parity with scripts/strategy_oracle.py on a 12-stock sample covering all 8 groups, plus stop_loss == max(triggerLow, MA20)"
+      },
+      "stop_conditions": {
+        "failure": [
+          "3 consecutive same-type failures",
+          "oracle vs app disagree on >2 sampled stocks and cannot be reconciled from the Manifest"
+        ],
+        "max_iterations": 4,
+        "on_failure": {
+          "action": "escalate"
+        }
+      },
+      "depends_on": [
+        "indicators"
+      ]
+    },
+    {
+      "id": "report_ui",
+      "definition_of_done": {
+        "goal": "Three views (overview/detail/strategy) render in React Native; K-line chart overlays MA+BOLL with signal markers using react-native-svg; 6 search filters combinable; CSV+text export produces a file; mobile UX per constraints (scroll/tabs/navigation). ViewModel signal-list parity with engine verified",
+        "machine_verifiable": true
+      },
+      "loop_pattern": "plan_execute_verify",
+      "feedback_signal": {
+        "check": "npm test -- --testPathPattern='ReportViewModelTest' && python3 scripts/verify_export.py --out /tmp/app_export.csv",
+        "expect": "pass",
+        "falsifiable_when": "the ViewModel emits a report that drops a BUY signal present in the engine output, or export CSV is missing columns/rows — the test/verify go non-zero",
+        "passing_but_wrong": "the test only asserts the ViewModel is not null / export file exists — ruled out: ReportViewModelTest asserts signal-list parity with the engine and verify_export.py asserts header+row counts match the in-memory report"
+      },
+      "stop_conditions": {
+        "failure": [
+          "3 consecutive same-type failures",
+          "a UI change modified a data-layer file (module-boundary violation)"
+        ],
+        "max_iterations": 4,
+        "on_failure": {
+          "action": "escalate"
+        }
+      },
+      "depends_on": [
+        "strategy_engine"
+      ]
+    },
+    {
+      "id": "schedule_import",
+      "definition_of_done": {
+        "goal": "expo-background-fetch enqueues a unique post-market run at 16:00 (±10min); manual single-strategy trigger works; DB import button shows confirm dialog and auto-backs-up the previous db before overwrite; missed-run auto-catchup on app open. All verified by unit tests",
+        "machine_verifiable": true
+      },
+      "loop_pattern": "plan_execute_verify",
+      "feedback_signal": {
+        "check": "npm test -- --testPathPattern='ScheduleImportTest'",
+        "expect": "pass",
+        "falsifiable_when": "Background fetch at 16:00 is not registered, or importing a new db overwrites the old one without backup / without confirm — the test asserts backup file exists and confirm gate is invoked",
+        "passing_but_wrong": "the test only asserts the import function returns true — ruled out: ScheduleImportTest asserts (a) a backup of the previous db is created before overwrite, (b) the confirm dialog state is required, (c) background fetch work is scheduled with the 16:00 constraint"
+      },
+      "stop_conditions": {
+        "failure": [
+          "3 consecutive same-type failures",
+          "Background fetch scheduling cannot be made testable on the target API level"
+        ],
+        "max_iterations": 4,
+        "on_failure": {
+          "action": "escalate"
+        }
+      },
+      "depends_on": [
+        "strategy_engine",
+        "report_ui"
+      ]
+    },
+    {
+      "id": "qa_integration",
+      "definition_of_done": {
+        "goal": "Full pipeline runs on bigdemo (2.02M rows) within 300s, emits non-empty report JSON with all 25 strategies represented; all prior unit tests green; no data-layer regression; QA checklist passed; version tagged and pushed to Gitee+GitHub",
+        "machine_verifiable": true
+      },
+      "loop_pattern": "review",
+      "feedback_signal": {
+        "check": "npm run build && npm test && python3 scripts/verify_e2e_bigdemo.py --db kline_5y_bigdemo.sqlite --timeout 300",
+        "expect": "pass",
+        "falsifiable_when": "the full pipeline on bigdemo throws, exceeds the 300s budget, or emits an empty report — verify_e2e_bigdemo.py exits non-zero; or any prior unit test regresses",
+        "passing_but_wrong": "npm run build green but verify_e2e only checks the build exists — ruled out: verify_e2e_bigdemo.py drives the engine module on the 202万-row db, asserts completion within --timeout and a non-empty report JSON with all 25 strategies represented"
+      },
+      "stop_conditions": {
+        "failure": [
+          "e2e exceeds 300s budget after 3 tuning passes",
+          "a prior unit test regresses after the integration change"
+        ],
+        "max_iterations": 3,
+        "on_failure": {
+          "action": "loopback",
+          "to": "strategy_engine"
+        }
+      },
+      "depends_on": [
+        "schedule_import"
+      ]
+    }
+  ],
+  "human_placement": "in_the_loop",
+  "maker_checker": {
+    "separate_checker": true,
+    "scope": "fresh-context reviewer sees only the diff + the per-stage acceptance checks + LOOP_MANIFEST.yaml; flags (a) indicator/strategy numeric correctness vs the python oracle, (b) any backward-compat regression in existing modules, (c) any UI-stage change that touches a data-layer file (module-boundary violation per Manifest constraint), (d) missing confirm-gate before file changes"
+  },
+  "harness_primitives": [
+    "git worktree isolation for reversible per-stage work",
+    "dual-remote git sync (Gitee primary, GitHub mirror) — push after each stage commit",
+    ".loop/run-state.md scratch ledger holding which stage is done + next action across context resets",
+    "pre-commit hook runs the current stage's check as a deterministic gate",
+    "python3 oracle/verify scripts (scripts/indicator_oracle.py, strategy_oracle.py, verify_schema.py, verify_export.py, verify_e2e_bigdemo.py) are stage deliverables and the independent source of truth for numeric correctness"
+  ],
+  "stop_conditions": {
+    "success": "all 6 stages pass in dependency order; app builds; bigdemo e2e completes within 300s and emits a non-empty report with all 25 strategies; all unit tests green; version tagged and pushed to both remotes",
+    "failure": [
+      "any stage exhausts its max_iterations without passing its check",
+      "a downstream stage forces a redesign of an accepted upstream stage twice",
+      "a data-layer file is modified by a UI-stage change (module-boundary violation)"
+    ],
+    "escalate": [
+      "performance on bigdemo exceeds budget and requires an architecture change to the scaffold stage",
+      "oracle vs app disagree beyond tolerance and cannot be resolved without an external market-data source"
+    ],
+    "max_iterations": 4
+  },
+  "risk_guards": [
+    {
+      "risk": "reward hacking / test overfitting (agent weakens the oracle or test to pass)",
+      "mitigation": "the python oracle is independent of the TypeScript tests; the maker/checker diffs test+oracle files and rejects weakening; numeric tolerance is fixed at 1e-6"
+    },
+    {
+      "risk": "backward-compat violation (UI change breaks data layer / old function removed)",
+      "mitigation": "Manifest constraint forbids data-layer edits from UI stages; enforced in maker_checker scope + git path guard; regression gate in qa_integration"
+    },
+    {
+      "risk": "context drift across the long sequential build",
+      "mitigation": ".loop/run-state.md ledger + selection_log pins per-stage scope; each stage re-reads LOOP_MANIFEST.yaml before coding"
+    },
+    {
+      "risk": "error amplification (a wrong upstream artifact poisons later gates)",
+      "mitigation": "stage gates run in dependency order; a downstream failure that implicates an upstream gate loops back (qa->strategy_engine) rather than head-banging in place"
+    },
+    {
+      "risk": "token blowup on a large from-scratch app",
+      "mitigation": "completeness-first profile => low caps (outer 4, per-stage 3-4), bounded per-stage scope, no full-file rewrites; each stage is a focused commit"
+    },
+    {
+      "risk": "permission blast radius (app reaches network / external resources)",
+      "mitigation": "Manifest mandates pure offline, no network permission; imports are user-initiated file picks only; no external calls in any stage"
+    }
+  ]
+}
