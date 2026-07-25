@@ -7,6 +7,7 @@
 | 序号 | 文件名 | 阶段 | 核心内容 | 落盘日期 |
 |------|--------|------|----------|----------|
 | 1 | lessons_learned_stage2_perf.md | Stage 2 | performance.now() 埋点 + setImmediate 分片调度，防 300s 超时 | 2026-07-25 |
+| 2 | lessons_learned_stage4_report_ui.md | Stage 4 | SVG K线图 + 6维搜索过滤器 | 2026-07-25 |
 
 ## 使用方式
 - 新的经验文件命名为 `lessons_learned_<stage>_<topic>.md`
