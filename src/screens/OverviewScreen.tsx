@@ -1,5 +1,6 @@
 import React, { useEffect, useState, useMemo } from 'react';
-import { View, Text, StyleSheet, ScrollView, ActivityIndicator, TouchableOpacity } from 'react-native';
+import { View, Text, StyleSheet, ScrollView, ActivityIndicator, TouchableOpacity, Alert } from 'react-native';
+import { useNavigation } from '@react-navigation/native';
 import { useDatabase } from '../database/SQLiteProvider';
 import { getAnalysisSummary, getAllAnalysis, runAnalysis, getFilteredResults } from '../services/AnalysisService';
 import * as DocumentPicker from 'expo-document-picker';
@@ -33,6 +34,7 @@ function SignalBadge({ signal }: { signal: 'BUY' | 'SELL' | 'NEUTRAL' }) {
 }
 
 export default function OverviewScreen() {
+  const navigation = useNavigation();
   const { isConnected, getTables, getStockCount, getKlineCount, getMeta, getStocks, getKlineByCode, importDatabase } = useDatabase();
   const [tables, setTables] = useState<string[]>([]);
   const [stockCount, setStockCount] = useState(0);
@@ -111,13 +113,39 @@ export default function OverviewScreen() {
       });
       if (result.canceled) return;
       if (result.assets && result.assets[0]) {
-        const success = await importDatabase(result.assets[0].uri);
-        if (success) {
-          loadData();
-        }
+        const fileUri = result.assets[0].uri;
+        const fileName = result.assets[0].name || '未知文件';
+
+        Alert.alert(
+          '确认导入数据库',
+          `即将导入文件：${fileName}\n\n导入后将自动备份当前数据库，原数据不会丢失。\n\n是否继续？`,
+          [
+            { text: '取消', style: 'cancel' },
+            {
+              text: '确认导入',
+              style: 'destructive',
+              onPress: async () => {
+                const importResult = await importDatabase(fileUri);
+                if (importResult.success) {
+                  loadData();
+                  Alert.alert(
+                    '导入成功',
+                    importResult.backupPath
+                      ? `数据库已更新\n备份已保存至：${importResult.backupPath}`
+                      : '数据库已成功导入',
+                    [{ text: '确定' }]
+                  );
+                } else {
+                  Alert.alert('导入失败', importResult.error || '请检查文件格式', [{ text: '确定' }]);
+                }
+              },
+            },
+          ]
+        );
       }
     } catch (error) {
       console.error('Import failed:', error);
+      Alert.alert('导入失败', '发生未知错误', [{ text: '确定' }]);
     }
   };
 
@@ -254,7 +282,12 @@ export default function OverviewScreen() {
           <Text style={styles.sectionTitle}>筛选结果</Text>
           <View style={styles.stockList}>
             {filteredResults.map(result => (
-              <View key={result.stock.code} style={styles.stockItem}>
+              <TouchableOpacity
+                key={result.stock.code}
+                style={styles.stockItem}
+                onPress={() => navigation.navigate('详情', { stockCode: result.stock.code })}
+                activeOpacity={0.7}
+              >
                 <View style={styles.stockTop}>
                   <View style={styles.stockLeft}>
                     <Text style={styles.stockCode}>{result.stock.code}</Text>
@@ -286,7 +319,7 @@ export default function OverviewScreen() {
                     )}
                   </View>
                 </View>
-              </View>
+              </TouchableOpacity>
             ))}
           </View>
         </View>

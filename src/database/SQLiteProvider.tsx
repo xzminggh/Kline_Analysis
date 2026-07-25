@@ -21,6 +21,12 @@ export interface KlineDaily {
   amount: number;
 }
 
+export interface DatabaseImportResult {
+  success: boolean;
+  backupPath?: string;
+  error?: string;
+}
+
 export interface DatabaseContextType {
   db: SQLite.Database | null;
   isConnected: boolean;
@@ -31,7 +37,8 @@ export interface DatabaseContextType {
   getStocks: () => Promise<Stock[]>;
   getKlineByCode: (code: string) => Promise<KlineDaily[]>;
   getMeta: () => Promise<Record<string, string>>;
-  importDatabase: (fileUri: string) => Promise<boolean>;
+  importDatabase: (fileUri: string) => Promise<DatabaseImportResult>;
+  getBackupList: () => Promise<string[]>;
 }
 
 const DatabaseContext = createContext<DatabaseContextType | null>(null);
@@ -172,18 +179,21 @@ export const SQLiteProvider: React.FC<{ children: ReactNode }> = ({ children }) 
     });
   };
 
-  const importDatabase = async (fileUri: string): Promise<boolean> => {
+  const importDatabase = async (fileUri: string): Promise<DatabaseImportResult> => {
     try {
       const dbName = 'kline.sqlite';
       const localDbPath = `${FileSystem.documentDirectory}SQLite/${dbName}`;
-      const backupPath = `${FileSystem.documentDirectory}SQLite/kline_backup_${Date.now()}.sqlite`;
+      const timestamp = Date.now();
+      const backupPath = `${FileSystem.documentDirectory}SQLite/kline_backup_${timestamp}.sqlite`;
 
       const localExists = await FileSystem.getInfoAsync(localDbPath);
+      let createdBackup = '';
       if (localExists.exists) {
         await FileSystem.copyAsync({
           from: localDbPath,
           to: backupPath,
         });
+        createdBackup = backupPath;
       }
 
       await FileSystem.copyAsync({
@@ -193,10 +203,30 @@ export const SQLiteProvider: React.FC<{ children: ReactNode }> = ({ children }) 
 
       const newDb = SQLite.openDatabase('kline');
       setDb(newDb);
-      return true;
-    } catch (error) {
+
+      if (createdBackup) {
+        return { success: true, backupPath: createdBackup };
+      }
+      return { success: true };
+    } catch (error: any) {
       console.error('Failed to import database:', error);
-      return false;
+      return { success: false, error: error?.message || '未知错误' };
+    }
+  };
+
+  const getBackupList = async (): Promise<string[]> => {
+    try {
+      const sqliteDir = `${FileSystem.documentDirectory}SQLite/`;
+      const dirInfo = await FileSystem.readDirectoryAsync(sqliteDir);
+      const backups = dirInfo
+        .filter(name => name.startsWith('kline_backup_') && name.endsWith('.sqlite'))
+        .sort()
+        .reverse()
+        .map(name => `${sqliteDir}${name}`);
+      return backups;
+    } catch (error) {
+      console.error('Failed to list backups:', error);
+      return [];
     }
   };
 
@@ -211,6 +241,7 @@ export const SQLiteProvider: React.FC<{ children: ReactNode }> = ({ children }) 
     getKlineByCode,
     getMeta,
     importDatabase,
+    getBackupList,
   };
 
   return (

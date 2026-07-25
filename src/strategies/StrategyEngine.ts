@@ -36,7 +36,12 @@ export interface StockAnalysis {
   sellSignals: number;
 }
 
-export function analyzeStock(klineData: KlineDaily[], stockCode: string, stockName: string): StockAnalysis {
+export function analyzeStock(
+  klineData: KlineDaily[],
+  stockCode: string,
+  stockName: string,
+  enabledStrategies?: string[]
+): StockAnalysis {
   if (klineData.length < 100) {
     return {
       code: stockCode,
@@ -48,6 +53,11 @@ export function analyzeStock(klineData: KlineDaily[], stockCode: string, stockNa
       sellSignals: 0,
     };
   }
+
+  const isEnabled = (strategyId: string): boolean => {
+    if (!enabledStrategies || enabledStrategies.length === 0) return true;
+    return enabledStrategies.includes(strategyId);
+  };
 
   const closes = klineData.map(k => k.close);
   const highs = klineData.map(k => k.high);
@@ -80,32 +90,32 @@ export function analyzeStock(klineData: KlineDaily[], stockCode: string, stockNa
 
   const strategies: StrategyResult[] = [];
 
-  strategies.push(t01DoubleMA(ema5, ema20, closes, n));
-  strategies.push(t02Ma60Cross(closes, ma60, ma60Slope, n));
-  strategies.push(t03GuppyCross(guppyMa, n));
-  strategies.push(t04ThreeLineReversal(opens, closes, n));
-  strategies.push(m01BollingerBounce(lows, closes, bollinger, n));
-  strategies.push(m02RsiOverboughtOversold(rsi14, opens, closes, n));
-  strategies.push(m03TripleFilter(bollinger, rsi14, volumes, volumeMa5, n));
-  strategies.push(m04GapFill(opens, closes, highs, lows, n));
-  strategies.push(p01MomCrossZero(mom10, n));
-  strategies.push(p02RocVolumeConfirm(roc10, volumes, volumeMa10, n));
-  strategies.push(p03VolumeBreakout(closes, highs, lows, volumes, volumeMa10, n));
-  strategies.push(p04EngulfingPattern(opens, closes, n));
-  strategies.push(s01DoubleBottomTop(closes, n));
-  strategies.push(s02TriangleBreakout(highs, lows, closes, n));
-  strategies.push(s03HeadShoulder(closes, n));
-  strategies.push(s04HammerShootingStar(highs, lows, opens, closes, n));
-  strategies.push(k01MaSupportResistance(closes, ma60, ma20, n));
-  strategies.push(k02PreviousHighLow(closes, n));
-  strategies.push(k03FibonacciRetracement(closes, n));
-  strategies.push(v01BollingerSqueeze(bollingerWidth, volumes, volumeMa5, closes, bollinger, n));
-  strategies.push(v02AtrBreakout(atr14, closes, n));
-  strategies.push(q01LowVolumeBottom(volumes, volumeMa20, lows, closes, n));
-  strategies.push(q02HighVolumeTop(volumes, volumeMa100, highs, opens, closes, n));
-  strategies.push(d01MacdDivergence(closes, macd, n));
-  strategies.push(d02RsiDivergence(closes, rsi14, n));
-  strategies.push(d03CciExtreme(cci20, closes, ema5, n));
+  if (isEnabled('T01')) strategies.push(t01DoubleMA(ema5, ema20, closes, n));
+  if (isEnabled('T02')) strategies.push(t02Ma60Cross(closes, ma60, ma60Slope, n));
+  if (isEnabled('T03')) strategies.push(t03GuppyCross(guppyMa, n));
+  if (isEnabled('T04')) strategies.push(t04ThreeLineReversal(opens, closes, n));
+  if (isEnabled('M01')) strategies.push(m01BollingerBounce(lows, closes, bollinger, n));
+  if (isEnabled('M02')) strategies.push(m02RsiOverboughtOversold(rsi14, opens, closes, n));
+  if (isEnabled('M03')) strategies.push(m03TripleFilter(bollinger, rsi14, volumes, volumeMa5, n));
+  if (isEnabled('M04')) strategies.push(m04GapFill(opens, closes, highs, lows, n));
+  if (isEnabled('P01')) strategies.push(p01MomCrossZero(mom10, n));
+  if (isEnabled('P02')) strategies.push(p02RocVolumeConfirm(roc10, volumes, volumeMa10, n));
+  if (isEnabled('P03')) strategies.push(p03VolumeBreakout(closes, highs, lows, volumes, volumeMa10, n));
+  if (isEnabled('P04')) strategies.push(p04EngulfingPattern(opens, closes, n));
+  if (isEnabled('S01')) strategies.push(s01DoubleBottomTop(closes, n));
+  if (isEnabled('S02')) strategies.push(s02TriangleBreakout(highs, lows, closes, n));
+  if (isEnabled('S03')) strategies.push(s03HeadShoulder(closes, n));
+  if (isEnabled('S04')) strategies.push(s04HammerShootingStar(highs, lows, opens, closes, n));
+  if (isEnabled('K01')) strategies.push(k01MaSupportResistance(closes, ma60, ma20, n));
+  if (isEnabled('K02')) strategies.push(k02PreviousHighLow(closes, n));
+  if (isEnabled('K03')) strategies.push(k03FibonacciRetracement(closes, n));
+  if (isEnabled('V01')) strategies.push(v01BollingerSqueeze(bollingerWidth, volumes, volumeMa5, closes, bollinger, n));
+  if (isEnabled('V02')) strategies.push(v02AtrBreakout(atr14, closes, n));
+  if (isEnabled('Q01')) strategies.push(q01LowVolumeBottom(volumes, volumeMa20, lows, closes, n));
+  if (isEnabled('Q02')) strategies.push(q02HighVolumeTop(volumes, volumeMa100, highs, opens, closes, n));
+  if (isEnabled('D01')) strategies.push(d01MacdDivergence(closes, macd, n));
+  if (isEnabled('D02')) strategies.push(d02RsiDivergence(closes, rsi14, n));
+  if (isEnabled('D03')) strategies.push(d03CciExtreme(cci20, closes, ema5, n));
 
   const buySignals = strategies.filter(s => s.signal === 'BUY').length;
   const sellSignals = strategies.filter(s => s.signal === 'SELL').length;

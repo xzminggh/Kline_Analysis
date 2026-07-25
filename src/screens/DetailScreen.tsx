@@ -1,5 +1,6 @@
 import React, { useEffect, useState } from 'react';
 import { View, Text, StyleSheet, ScrollView, ActivityIndicator, TextInput, TouchableOpacity } from 'react-native';
+import { useRoute } from '@react-navigation/native';
 import { useDatabase, KlineDaily, Stock } from '../database/SQLiteProvider';
 import { getAnalysisByCode, runAnalysis, AnalysisResult } from '../services/AnalysisService';
 import { analyzeStock, StockAnalysis } from '../strategies/StrategyEngine';
@@ -33,8 +34,10 @@ function SignalBadge({ signal }: { signal: 'BUY' | 'SELL' | 'NEUTRAL' }) {
 }
 
 export default function DetailScreen() {
+  const route = useRoute();
   const { getKlineByCode, getStocks } = useDatabase();
-  const [code, setCode] = useState('000001');
+  const routeParams = (route.params as { stockCode?: string }) || {};
+  const [code, setCode] = useState(routeParams.stockCode || '000001');
   const [klineData, setKlineData] = useState<KlineDaily[]>([]);
   const [loading, setLoading] = useState(false);
   const [stockList, setStockList] = useState<Stock[]>([]);

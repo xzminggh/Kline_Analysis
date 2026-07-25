@@ -44,11 +44,13 @@ function yieldToMain(): Promise<void> {
 /**
  * 运行全量策略分析（分片调度 + 性能埋点）
  * @param onProgress 进度回调 (当前数, 总数)
+ * @param enabledStrategies 启用的策略ID列表，不传则全部启用
  */
 export async function runAnalysis(
   stocks: Stock[],
   getKlineByCode: (code: string) => Promise<KlineDaily[]>,
-  onProgress?: (current: number, total: number) => void
+  onProgress?: (current: number, total: number) => void,
+  enabledStrategies?: string[]
 ): Promise<AnalysisResult[]> {
   analysisCache.clear();
   PerformanceMonitor.clear();
@@ -70,7 +72,7 @@ export async function runAnalysis(
       if (klineData.length >= 100) {
         PerformanceMonitor.start('per_stock');
         PerformanceMonitor.start('indicator_calc');
-        const analysis = analyzeStock(klineData, stock.code, stock.name);
+        const analysis = analyzeStock(klineData, stock.code, stock.name, enabledStrategies);
         PerformanceMonitor.end('indicator_calc');
 
         const latestKline = klineData[klineData.length - 1];

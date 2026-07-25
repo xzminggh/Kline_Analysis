@@ -99,9 +99,15 @@ export default function StrategyScreen() {
 
     try {
       const stocks = await getStocks();
-      const results = await runAnalysis(stocks, getKlineByCode, (current, total) => {
-        setProgress({ current, total });
-      });
+      const enabledIds = strategies.filter(s => s.enabled).map(s => s.id);
+      const results = await runAnalysis(
+        stocks,
+        getKlineByCode,
+        (current, total) => {
+          setProgress({ current, total });
+        },
+        enabledIds.length > 0 ? enabledIds : undefined
+      );
       setAnalysisResults(results);
       setShowResults(true);
     } catch (error) {
