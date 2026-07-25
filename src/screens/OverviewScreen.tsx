@@ -1,8 +1,9 @@
-import React, { useEffect, useState } from 'react';
+import React, { useEffect, useState, useMemo } from 'react';
 import { View, Text, StyleSheet, ScrollView, ActivityIndicator, TouchableOpacity } from 'react-native';
 import { useDatabase } from '../database/SQLiteProvider';
 import { getAnalysisSummary, getAllAnalysis, runAnalysis, getFilteredResults } from '../services/AnalysisService';
 import * as DocumentPicker from 'expo-document-picker';
+import SearchFilter, { FilterState } from '../components/SearchFilter';
 
 function StarRating({ rating }: { rating: number }) {
   return (
@@ -42,6 +43,14 @@ export default function OverviewScreen() {
   const [progress, setProgress] = useState({ current: 0, total: 0 });
   const [summary, setSummary] = useState(getAnalysisSummary());
   const [topStocks, setTopStocks] = useState(getAllAnalysis());
+  const [filters, setFilters] = useState<FilterState>({
+    keyword: '',
+    starRating: null,
+    signalType: 'ALL',
+    minScore: null,
+    sortBy: 'score',
+    sortOrder: 'desc',
+  });
 
   useEffect(() => {
     loadData();
@@ -130,6 +139,45 @@ export default function OverviewScreen() {
     .sort((a, b) => b.analysis.buySignals - a.analysis.buySignals)
     .slice(0, 5);
 
+  const filteredResults = useMemo(() => {
+    let results = [...topStocks];
+
+    if (filters.keyword) {
+      const kw = filters.keyword.toLowerCase();
+      results = results.filter(r =>
+        r.stock.code.includes(kw) || r.stock.name.toLowerCase().includes(kw)
+      );
+    }
+
+    if (filters.starRating !== null) {
+      results = results.filter(r => r.analysis.starRating === filters.starRating);
+    }
+
+    if (filters.signalType !== 'ALL') {
+      results = results.filter(r =>
+        r.analysis.strategies.some(s => s.signal === filters.signalType)
+      );
+    }
+
+    if (filters.minScore !== null) {
+      results = results.filter(r => r.analysis.overallScore >= filters.minScore!);
+    }
+
+    results.sort((a, b) => {
+      let diff = 0;
+      if (filters.sortBy === 'score') {
+        diff = a.analysis.overallScore - b.analysis.overallScore;
+      } else if (filters.sortBy === 'buySignals') {
+        diff = a.analysis.buySignals - b.analysis.buySignals;
+      } else if (filters.sortBy === 'sellSignals') {
+        diff = a.analysis.sellSignals - b.analysis.sellSignals;
+      }
+      return filters.sortOrder === 'desc' ? -diff : diff;
+    });
+
+    return results;
+  }, [topStocks, filters]);
+
   return (
     <ScrollView style={styles.container}>
       <View style={styles.section}>
@@ -191,6 +239,62 @@ export default function OverviewScreen() {
               {isRunning ? `分析中 ${progress.current}/${progress.total}...` : '运行策略筛选'}
             </Text>
           </TouchableOpacity>
+        </View>
+      )}
+
+      {topStocks.length > 0 && (
+        <SearchFilter
+          totalCount={filteredResults.length}
+          onFilterChange={setFilters}
+        />
+      )}
+
+      {filteredResults.length > 0 && (
+        <View style={styles.section}>
+          <Text style={styles.sectionTitle}>筛选结果</Text>
+          <View style={styles.stockList}>
+            {filteredResults.map(result => (
+              <View key={result.stock.code} style={styles.stockItem}>
+                <View style={styles.stockTop}>
+                  <View style={styles.stockLeft}>
+                    <Text style={styles.stockCode}>{result.stock.code}</Text>
+                    <Text style={styles.stockName}>{result.stock.name}</Text>
+                  </View>
+                  <View style={styles.stockRight}>
+                    <StarRating rating={result.analysis.starRating} />
+                    <Text style={styles.stockScore}>{result.analysis.overallScore}分</Text>
+                  </View>
+                </View>
+                <View style={styles.stockBottom}>
+                  {result.latestKline && (
+                    <View style={styles.stockPrice}>
+                      <Text style={styles.priceValue}>{result.latestKline.close.toFixed(2)}</Text>
+                      <Text style={result.latestKline.close >= result.latestKline.open ? styles.priceUp : styles.priceDown}>
+                        {result.latestKline.close >= result.latestKline.open ? '+' : ''}
+                        {((result.latestKline.close - result.latestKline.open) / result.latestKline.open * 100).toFixed(2)}%
+                      </Text>
+                    </View>
+                  )}
+                  <View style={styles.stockSignals}>
+                    <SignalBadge signal="BUY" />
+                    <Text style={styles.signalCount}>{result.analysis.buySignals}</Text>
+                    {result.analysis.sellSignals > 0 && (
+                      <>
+                        <SignalBadge signal="SELL" />
+                        <Text style={styles.signalCount}>{result.analysis.sellSignals}</Text>
+                      </>
+                    )}
+                  </View>
+                </View>
+              </View>
+            ))}
+          </View>
+        </View>
+      )}
+
+      {topStocks.length > 0 && filteredResults.length === 0 && (
+        <View style={styles.emptySection}>
+          <Text style={styles.emptyText}>没有找到匹配的股票</Text>
         </View>
       )}
 
@@ -433,6 +537,28 @@ const styles = StyleSheet.create({
   priceDown: {
     color: '#ef4444',
     fontSize: 14,
+  },
+  stockTop: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    marginBottom: 8,
+  },
+  stockBottom: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+  },
+  stockSignals: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 6,
+  },
+  emptySection: {
+    backgroundColor: '#16213e',
+    borderRadius: 12,
+    padding: 32,
+    alignItems: 'center',
+    marginBottom: 16,
   },
   signalList: {
     maxHeight: 250,

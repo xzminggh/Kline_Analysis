@@ -3,6 +3,7 @@ import { View, Text, StyleSheet, ScrollView, ActivityIndicator, TextInput, Touch
 import { useDatabase, KlineDaily, Stock } from '../database/SQLiteProvider';
 import { getAnalysisByCode, runAnalysis, AnalysisResult } from '../services/AnalysisService';
 import { analyzeStock, StockAnalysis } from '../strategies/StrategyEngine';
+import KlineChart from '../components/KlineChart';
 
 function StarRating({ rating }: { rating: number }) {
   return (
@@ -39,6 +40,12 @@ export default function DetailScreen() {
   const [stockList, setStockList] = useState<Stock[]>([]);
   const [analysis, setAnalysis] = useState<StockAnalysis | null>(null);
   const [analysisLoading, setAnalysisLoading] = useState(false);
+  const [chartSettings, setChartSettings] = useState({
+    showMA5: true,
+    showMA10: true,
+    showMA20: true,
+    showBOLL: false,
+  });
 
   useEffect(() => {
     const loadStockList = async () => {
@@ -225,6 +232,46 @@ export default function DetailScreen() {
               </View>
             </>
           ) : null}
+        </View>
+      )}
+
+      {klineData.length > 0 && (
+        <View style={styles.section}>
+          <Text style={styles.sectionTitle}>K线图</Text>
+          <View style={styles.chartToggles}>
+            <TouchableOpacity
+              style={[styles.toggleBtn, chartSettings.showMA5 && styles.toggleBtnActive]}
+              onPress={() => setChartSettings(s => ({ ...s, showMA5: !s.showMA5 }))}
+            >
+              <Text style={[styles.toggleBtnText, chartSettings.showMA5 && styles.toggleBtnTextActive]}>MA5</Text>
+            </TouchableOpacity>
+            <TouchableOpacity
+              style={[styles.toggleBtn, chartSettings.showMA10 && styles.toggleBtnActive]}
+              onPress={() => setChartSettings(s => ({ ...s, showMA10: !s.showMA10 }))}
+            >
+              <Text style={[styles.toggleBtnText, chartSettings.showMA10 && styles.toggleBtnTextActive]}>MA10</Text>
+            </TouchableOpacity>
+            <TouchableOpacity
+              style={[styles.toggleBtn, chartSettings.showMA20 && styles.toggleBtnActive]}
+              onPress={() => setChartSettings(s => ({ ...s, showMA20: !s.showMA20 }))}
+            >
+              <Text style={[styles.toggleBtnText, chartSettings.showMA20 && styles.toggleBtnTextActive]}>MA20</Text>
+            </TouchableOpacity>
+            <TouchableOpacity
+              style={[styles.toggleBtn, chartSettings.showBOLL && styles.toggleBtnActive]}
+              onPress={() => setChartSettings(s => ({ ...s, showBOLL: !s.showBOLL }))}
+            >
+              <Text style={[styles.toggleBtnText, chartSettings.showBOLL && styles.toggleBtnTextActive]}>BOLL</Text>
+            </TouchableOpacity>
+          </View>
+          <KlineChart
+            data={klineData.slice(-60)}
+            height={300}
+            showMA5={chartSettings.showMA5}
+            showMA10={chartSettings.showMA10}
+            showMA20={chartSettings.showMA20}
+            showBOLL={chartSettings.showBOLL}
+          />
         </View>
       )}
 
@@ -485,5 +532,27 @@ const styles = StyleSheet.create({
     fontSize: 12,
     fontWeight: '500',
     width: 60,
+  },
+  chartToggles: {
+    flexDirection: 'row',
+    marginBottom: 12,
+    gap: 8,
+  },
+  toggleBtn: {
+    paddingHorizontal: 12,
+    paddingVertical: 6,
+    borderRadius: 6,
+    backgroundColor: '#0f3460',
+  },
+  toggleBtnActive: {
+    backgroundColor: '#00d4ff',
+  },
+  toggleBtnText: {
+    color: '#6b7280',
+    fontSize: 12,
+    fontWeight: '500',
+  },
+  toggleBtnTextActive: {
+    color: '#0a0a0f',
   },
 });
