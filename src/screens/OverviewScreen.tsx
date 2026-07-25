@@ -43,6 +43,7 @@ export default function OverviewScreen() {
   const [loading, setLoading] = useState(true);
   const [isRunning, setIsRunning] = useState(false);
   const [progress, setProgress] = useState({ current: 0, total: 0 });
+  const [showPerfReport, setShowPerfReport] = useState(false);
   const [summary, setSummary] = useState(getAnalysisSummary());
   const [topStocks, setTopStocks] = useState(getAllAnalysis());
   const [filters, setFilters] = useState<FilterState>({
@@ -267,6 +268,27 @@ export default function OverviewScreen() {
               {isRunning ? `分析中 ${progress.current}/${progress.total}...` : '运行策略筛选'}
             </Text>
           </TouchableOpacity>
+
+          {summary?.performanceReport && (
+            <TouchableOpacity
+              style={styles.perfToggle}
+              onPress={() => setShowPerfReport(!showPerfReport)}
+            >
+              <Text style={styles.perfToggleText}>
+                {showPerfReport ? '▼ 性能报告' : '▶ 性能报告'}
+              </Text>
+            </TouchableOpacity>
+          )}
+
+          {showPerfReport && summary?.performanceReport && (
+            <View style={styles.perfReport}>
+              {summary.performanceReport.split('\n').map((line, i) => (
+                <Text key={i} style={styles.perfLine}>
+                  {line}
+                </Text>
+              ))}
+            </View>
+          )}
         </View>
       )}
 
@@ -489,6 +511,27 @@ const styles = StyleSheet.create({
     color: '#0a0a0f',
     fontSize: 18,
     fontWeight: 'bold',
+  },
+  perfToggle: {
+    marginTop: 12,
+    padding: 8,
+    alignItems: 'center',
+  },
+  perfToggleText: {
+    color: '#00d4ff',
+    fontSize: 12,
+  },
+  perfReport: {
+    marginTop: 8,
+    padding: 12,
+    backgroundColor: '#0f3460',
+    borderRadius: 8,
+  },
+  perfLine: {
+    color: '#94a3b8',
+    fontSize: 11,
+    fontFamily: 'monospace',
+    lineHeight: 18,
   },
   statsGrid: {
     flexDirection: 'row',
