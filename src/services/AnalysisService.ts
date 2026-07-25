@@ -1,5 +1,6 @@
 import { KlineDaily, Stock } from '../database/SQLiteProvider';
 import { analyzeStock, StockAnalysis, StrategyResult } from '../strategies/StrategyEngine';
+import { PerformanceMonitor } from '../utils/PerformanceMonitor';
 
 export interface AnalysisResult {
   stock: Stock;
@@ -17,34 +18,91 @@ export interface AnalysisSummary {
   star3Count: number;
   star2Count: number;
   star1Count: number;
+  performanceReport?: string;
 }
 
 let analysisCache: Map<string, AnalysisResult> = new Map();
 let analysisSummary: AnalysisSummary | null = null;
 
+// 分片配置：每批处理股票数，Hermes 下 setImmediate 无 4ms 钳制
+const BATCH_SIZE = 5;
+
+/**
+ * 让出主线程，避免阻塞 UI
+ * Hermes 下 setImmediate 无 4ms 钳制，优于 setTimeout(0)
+ */
+function yieldToMain(): Promise<void> {
+  return new Promise(resolve => {
+    if (typeof setImmediate !== 'undefined') {
+      setImmediate(() => resolve());
+    } else {
+      setTimeout(() => resolve(), 0);
+    }
+  });
+}
+
+/**
+ * 运行全量策略分析（分片调度 + 性能埋点）
+ * @param onProgress 进度回调 (当前数, 总数)
+ */
 export async function runAnalysis(
   stocks: Stock[],
-  getKlineByCode: (code: string) => Promise<KlineDaily[]>
+  getKlineByCode: (code: string) => Promise<KlineDaily[]>,
+  onProgress?: (current: number, total: number) => void
 ): Promise<AnalysisResult[]> {
   analysisCache.clear();
-  const results: AnalysisResult[] = [];
+  PerformanceMonitor.clear();
 
-  for (const stock of stocks) {
-    const klineData = await getKlineByCode(stock.code);
-    if (klineData.length >= 100) {
-      const analysis = analyzeStock(klineData, stock.code, stock.name);
-      const latestKline = klineData[klineData.length - 1];
-      const result: AnalysisResult = { stock, analysis, latestKline };
-      results.push(result);
-      analysisCache.set(stock.code, result);
+  const results: AnalysisResult[] = [];
+  const total = stocks.length;
+
+  PerformanceMonitor.start('total_analysis');
+
+  // 分片处理：每批 BATCH_SIZE 只，批间让出主线程
+  for (let i = 0; i < total; i += BATCH_SIZE) {
+    const batch = stocks.slice(i, i + BATCH_SIZE);
+
+    for (const stock of batch) {
+      PerformanceMonitor.start('db_query');
+      const klineData = await getKlineByCode(stock.code);
+      PerformanceMonitor.end('db_query');
+
+      if (klineData.length >= 100) {
+        PerformanceMonitor.start('per_stock');
+        PerformanceMonitor.start('indicator_calc');
+        const analysis = analyzeStock(klineData, stock.code, stock.name);
+        PerformanceMonitor.end('indicator_calc');
+
+        const latestKline = klineData[klineData.length - 1];
+        const result: AnalysisResult = { stock, analysis, latestKline };
+        results.push(result);
+        analysisCache.set(stock.code, result);
+        PerformanceMonitor.end('per_stock');
+      }
+
+      // 进度回调
+      if (onProgress) {
+        onProgress(i + batch.indexOf(stock) + 1, total);
+      }
     }
+
+    // 批间让出主线程，保证 UI 响应
+    await yieldToMain();
   }
 
-  updateSummary(results);
+  PerformanceMonitor.end('total_analysis');
+
+  // 生成性能报告
+  const perfReport = PerformanceMonitor.getReport();
+  if (__DEV__) {
+    console.log('=== 性能报告 ===\n' + perfReport);
+  }
+
+  updateSummary(results, perfReport);
   return results;
 }
 
-function updateSummary(results: AnalysisResult[]) {
+function updateSummary(results: AnalysisResult[], perfReport?: string) {
   const star5 = results.filter(r => r.analysis.starRating === 5).length;
   const star4 = results.filter(r => r.analysis.starRating === 4).length;
   const star3 = results.filter(r => r.analysis.starRating === 3).length;
@@ -64,6 +122,7 @@ function updateSummary(results: AnalysisResult[]) {
     star3Count: star3,
     star2Count: star2,
     star1Count: star1,
+    performanceReport: perfReport,
   };
 }
 

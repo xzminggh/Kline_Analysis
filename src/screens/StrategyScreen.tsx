@@ -70,6 +70,7 @@ export default function StrategyScreen() {
   const [isRunning, setIsRunning] = useState(false);
   const [analysisResults, setAnalysisResults] = useState<AnalysisResult[]>([]);
   const [showResults, setShowResults] = useState(false);
+  const [progress, setProgress] = useState({ current: 0, total: 0 });
 
   useEffect(() => {
     const cached = getAllAnalysis();
@@ -94,10 +95,13 @@ export default function StrategyScreen() {
 
     setIsRunning(true);
     setShowResults(false);
+    setProgress({ current: 0, total: 0 });
 
     try {
       const stocks = await getStocks();
-      const results = await runAnalysis(stocks, getKlineByCode);
+      const results = await runAnalysis(stocks, getKlineByCode, (current, total) => {
+        setProgress({ current, total });
+      });
       setAnalysisResults(results);
       setShowResults(true);
     } catch (error) {
@@ -122,12 +126,14 @@ export default function StrategyScreen() {
     : strategies;
 
   if (isRunning) {
+    const pct = progress.total > 0 ? Math.round((progress.current / progress.total) * 100) : 0;
     return (
       <View style={styles.container}>
         <View style={styles.centered}>
           <ActivityIndicator size="large" color="#00d4ff" />
           <Text style={styles.runningText}>正在运行25个策略分析...</Text>
-          <Text style={styles.runningSubText}>请稍候，这可能需要几分钟</Text>
+          <Text style={styles.progressText}>{progress.current} / {progress.total} ({pct}%)</Text>
+          <Text style={styles.runningSubText}>分片调度中，请稍候</Text>
         </View>
       </View>
     );
@@ -320,6 +326,12 @@ const styles = StyleSheet.create({
     color: '#6b7280',
     fontSize: 14,
     marginTop: 8,
+  },
+  progressText: {
+    color: '#00d4ff',
+    fontSize: 24,
+    fontWeight: 'bold',
+    marginTop: 12,
   },
   statsGrid: {
     flexDirection: 'row',

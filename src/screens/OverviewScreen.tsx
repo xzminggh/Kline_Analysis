@@ -39,6 +39,7 @@ export default function OverviewScreen() {
   const [meta, setMeta] = useState<Record<string, string>>({});
   const [loading, setLoading] = useState(true);
   const [isRunning, setIsRunning] = useState(false);
+  const [progress, setProgress] = useState({ current: 0, total: 0 });
   const [summary, setSummary] = useState(getAnalysisSummary());
   const [topStocks, setTopStocks] = useState(getAllAnalysis());
 
@@ -78,9 +79,12 @@ export default function OverviewScreen() {
   const handleRunAnalysis = async () => {
     if (!isConnected) return;
     setIsRunning(true);
+    setProgress({ current: 0, total: 0 });
     try {
       const stocks = await getStocks();
-      const results = await runAnalysis(stocks, getKlineByCode);
+      const results = await runAnalysis(stocks, getKlineByCode, (current, total) => {
+        setProgress({ current, total });
+      });
       setTopStocks(results);
       setSummary(getAnalysisSummary());
     } catch (error) {
@@ -184,7 +188,7 @@ export default function OverviewScreen() {
             disabled={isRunning}
           >
             <Text style={styles.runButtonText}>
-              {isRunning ? '分析中...' : '运行策略筛选'}
+              {isRunning ? `分析中 ${progress.current}/${progress.total}...` : '运行策略筛选'}
             </Text>
           </TouchableOpacity>
         </View>
@@ -250,7 +254,7 @@ export default function OverviewScreen() {
               disabled={isRunning}
             >
               <Text style={styles.runButtonText}>
-                {isRunning ? '分析中...' : '运行策略筛选'}
+                {isRunning ? `分析中 ${progress.current}/${progress.total}...` : '运行策略筛选'}
               </Text>
             </TouchableOpacity>
           </View>
