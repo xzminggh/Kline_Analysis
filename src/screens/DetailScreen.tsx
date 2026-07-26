@@ -2,9 +2,10 @@ import React, { useEffect, useState } from 'react';
 import { View, Text, StyleSheet, ScrollView, ActivityIndicator, TextInput, TouchableOpacity } from 'react-native';
 import { useRoute } from '@react-navigation/native';
 import { useDatabase, KlineDaily, Stock } from '../database/SQLiteProvider';
-import { getAnalysisByCode, runAnalysis, AnalysisResult } from '../services/AnalysisService';
+import { getAnalysisByCode } from '../services/AnalysisService';
 import { analyzeStock, StockAnalysis } from '../strategies/StrategyEngine';
 import KlineChart from '../components/KlineChart';
+import ErrorBoundary from '../components/ErrorBoundary';
 
 function StarRating({ rating }: { rating: number }) {
   return (
@@ -118,7 +119,7 @@ export default function DetailScreen() {
         {stockList.length > 0 && (
           <View style={styles.suggestions}>
             <Text style={styles.suggestionsTitle}>热门股票:</Text>
-            <ScrollView horizontal style={styles.suggestionsScroll}>
+            <View style={styles.suggestionsScroll}>
               {stockList.slice(0, 10).map(s => (
                 <TouchableOpacity
                   key={s.code}
@@ -128,9 +129,9 @@ export default function DetailScreen() {
                   <Text style={styles.suggestionText}>{s.code}</Text>
                 </TouchableOpacity>
               ))}
-            </ScrollView>
+            </View>
           </View>
-        )}
+      )}
       </View>
 
       {loading ? (
@@ -200,7 +201,7 @@ export default function DetailScreen() {
 
               <View style={styles.strategyResults}>
                 <Text style={styles.subTitle}>买入信号策略:</Text>
-                <ScrollView style={styles.strategyList}>
+                <View style={styles.strategyList}>
                   {analysis.strategies
                     .filter(s => s.signal === 'BUY')
                     .map(s => (
@@ -213,12 +214,12 @@ export default function DetailScreen() {
                   {analysis.strategies.filter(s => s.signal === 'BUY').length === 0 && (
                     <Text style={styles.emptyText}>暂无买入信号</Text>
                   )}
-                </ScrollView>
+                </View>
               </View>
 
               <View style={styles.strategyResults}>
                 <Text style={styles.subTitle}>卖出信号策略:</Text>
-                <ScrollView style={styles.strategyList}>
+                <View style={styles.strategyList}>
                   {analysis.strategies
                     .filter(s => s.signal === 'SELL')
                     .map(s => (
@@ -231,7 +232,7 @@ export default function DetailScreen() {
                   {analysis.strategies.filter(s => s.signal === 'SELL').length === 0 && (
                     <Text style={styles.emptyText}>暂无卖出信号</Text>
                   )}
-                </ScrollView>
+                </View>
               </View>
             </>
           ) : null}
@@ -267,21 +268,23 @@ export default function DetailScreen() {
               <Text style={[styles.toggleBtnText, chartSettings.showBOLL && styles.toggleBtnTextActive]}>BOLL</Text>
             </TouchableOpacity>
           </View>
-          <KlineChart
-            data={klineData.slice(-60)}
-            height={300}
-            showMA5={chartSettings.showMA5}
-            showMA10={chartSettings.showMA10}
-            showMA20={chartSettings.showMA20}
-            showBOLL={chartSettings.showBOLL}
-          />
+          <ErrorBoundary>
+            <KlineChart
+              data={klineData.slice(-60)}
+              height={300}
+              showMA5={chartSettings.showMA5}
+              showMA10={chartSettings.showMA10}
+              showMA20={chartSettings.showMA20}
+              showBOLL={chartSettings.showBOLL}
+            />
+          </ErrorBoundary>
         </View>
       )}
 
       {klineData.length > 0 && (
         <View style={styles.section}>
           <Text style={styles.sectionTitle}>历史K线 ({klineData.length}条)</Text>
-          <ScrollView style={styles.klineList}>
+          <View style={styles.klineList}>
             {klineData.slice(-20).reverse().map((item, index) => (
               <View key={index} style={styles.klineRow}>
                 <Text style={styles.klineDate}>{item.date}</Text>
@@ -293,7 +296,7 @@ export default function DetailScreen() {
                 </Text>
               </View>
             ))}
-          </ScrollView>
+          </View>
         </View>
       )}
     </ScrollView>
@@ -341,6 +344,7 @@ const styles = StyleSheet.create({
   },
   suggestionsScroll: {
     flexDirection: 'row',
+    flexWrap: 'wrap',
   },
   suggestionItem: {
     backgroundColor: '#0f3460',
@@ -453,7 +457,7 @@ const styles = StyleSheet.create({
     marginBottom: 16,
   },
   strategyList: {
-    maxHeight: 200,
+    // 移除maxHeight，使用外层ScrollView滚动
   },
   strategyRow: {
     flexDirection: 'row',
@@ -495,7 +499,7 @@ const styles = StyleSheet.create({
     fontSize: 16,
   },
   klineList: {
-    maxHeight: 400,
+    // 移除maxHeight，使用外层ScrollView滚动
   },
   klineRow: {
     flexDirection: 'row',

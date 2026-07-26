@@ -579,7 +579,7 @@ const styles = StyleSheet.create({
     marginTop: 4,
   },
   stockList: {
-    maxHeight: 400,
+    // 移除maxHeight限制，让外层ScrollView自然滚动
   },
   stockItem: {
     padding: 12,
@@ -660,7 +660,7 @@ const styles = StyleSheet.create({
     marginBottom: 16,
   },
   signalList: {
-    maxHeight: 250,
+    // 移除maxHeight限制
   },
   signalItem: {
     flexDirection: 'row',

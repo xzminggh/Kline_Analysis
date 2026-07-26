@@ -1,8 +1,8 @@
 import React, { useMemo, useState, useCallback } from 'react';
-import { View, StyleSheet, Dimensions } from 'react-native';
+import { View, Text, StyleSheet, Dimensions } from 'react-native';
 import Svg, { Line, Rect, Text as SvgText, G, Path } from 'react-native-svg';
 import { KlineDaily } from '../database/SQLiteProvider';
-import { calculateMA, calculateBOLL } from '../indicators/Indicators';
+import { calculateMA, calculateBollinger as calculateBOLL } from '../indicators/Indicators';
 
 interface KlineChartProps {
   data: KlineDaily[];
