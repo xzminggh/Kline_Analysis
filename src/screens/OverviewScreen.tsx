@@ -2,7 +2,7 @@ import React, { useEffect, useState, useMemo } from 'react';
 import { View, Text, StyleSheet, ScrollView, ActivityIndicator, TouchableOpacity, Alert } from 'react-native';
 import { useNavigation } from '@react-navigation/native';
 import { useDatabase } from '../database/SQLiteProvider';
-import { getAnalysisSummary, getAllAnalysis, runAnalysis, getFilteredResults } from '../services/AnalysisService';
+import { getAnalysisSummary, getAllAnalysis, runAnalysis, getFilteredResults, getEnabledStrategyIds } from '../services/AnalysisService';
 import * as DocumentPicker from 'expo-document-picker';
 import SearchFilter, { FilterState } from '../components/SearchFilter';
 import Dashboard from '../components/Dashboard';
@@ -96,9 +96,16 @@ export default function OverviewScreen() {
     setProgress({ current: 0, total: 0 });
     try {
       const stocks = await getStocks();
+      const enabledIds = getEnabledStrategyIds();
+      if (enabledIds.length === 0) {
+        setTopStocks([]);
+        setSummary(null);
+        setIsRunning(false);
+        return;
+      }
       const results = await runAnalysis(stocks, getKlineByCode, (current, total) => {
         setProgress({ current, total });
-      });
+      }, enabledIds);
       setTopStocks(results);
       setSummary(getAnalysisSummary());
     } catch (error) {
@@ -294,7 +301,7 @@ export default function OverviewScreen() {
               </TouchableOpacity>
             ))}
           </ScrollView>
-          <ScrollView style={styles.stockList}>
+          <ScrollView style={styles.stockList} showsVerticalScrollIndicator={true} persistentScrollbar={true} nestedScrollEnabled={true}>
             {filteredResults.map(result => (
               <TouchableOpacity
                 key={result.stock.code}

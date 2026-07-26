@@ -45,16 +45,12 @@ class PerformanceMonitorImpl {
   end(label: string): number {
     const startTime = this.activeMarks.get(label);
     if (startTime === undefined) {
-      console.warn(`[PerfMonitor] No start mark for "${label}"`);
+      // 忽略未开始的标记（可能是clear()导致的状态丢失）
       return 0;
     }
     const duration = getNow() - startTime;
     this.activeMarks.delete(label);
     this.records.push({ label, duration, timestamp: Date.now() });
-
-    if (__DEV__) {
-      console.log(`[Perf] ${label}: ${duration.toFixed(2)}ms`);
-    }
     return duration;
   }
 

@@ -6,6 +6,7 @@ import { SQLiteProvider } from './database/SQLiteProvider';
 import OverviewScreen from './screens/OverviewScreen';
 import DetailScreen from './screens/DetailScreen';
 import StrategyScreen from './screens/StrategyScreen';
+import HelpScreen from './screens/HelpScreen';
 
 const Tab = createBottomTabNavigator();
 
@@ -63,6 +64,7 @@ export default function App() {
           <Tab.Screen name="概览" component={OverviewScreen} />
           <Tab.Screen name="详情" component={DetailScreen} />
           <Tab.Screen name="策略" component={StrategyScreen} />
+          <Tab.Screen name="说明" component={HelpScreen} />
         </Tab.Navigator>
       </NavigationContainer>
     </SQLiteProvider>

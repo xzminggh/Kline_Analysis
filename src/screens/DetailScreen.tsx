@@ -344,25 +344,25 @@ export default function DetailScreen() {
       {klineData.length > 0 && (
         <View style={styles.section}>
           <Text style={styles.sectionTitle}>历史K线 (共{klineData.length}条，倒序)</Text>
-          <View style={styles.klineHeader}>
+          <View style={styles.klineTableHeader}>
             <Text style={styles.klineHeaderDate}>日期</Text>
-            <Text style={styles.klineHeaderOpen}>开盘</Text>
-            <Text style={styles.klineHeaderHigh}>最高</Text>
-            <Text style={styles.klineHeaderLow}>最低</Text>
-            <Text style={styles.klineHeaderClose}>收盘</Text>
-            <Text style={styles.klineHeaderVolume}>成交量(万)</Text>
+            <Text style={styles.klineHeaderNum}>开盘</Text>
+            <Text style={styles.klineHeaderNum}>最高</Text>
+            <Text style={styles.klineHeaderNum}>最低</Text>
+            <Text style={styles.klineHeaderNum}>收盘</Text>
+            <Text style={styles.klineHeaderNum}>成交量(万)</Text>
           </View>
-          <ScrollView style={styles.klineList}>
+          <ScrollView style={styles.klineList} showsVerticalScrollIndicator={true} persistentScrollbar={true} nestedScrollEnabled={true}>
             {[...klineData].reverse().map((item, index) => (
               <View key={index} style={styles.klineRow}>
                 <Text style={styles.klineDate}>{item.date}</Text>
-                <Text style={styles.klineOpen}>{item.open.toFixed(2)}</Text>
-                <Text style={styles.klineHigh}>{item.high.toFixed(2)}</Text>
-                <Text style={styles.klineLow}>{item.low.toFixed(2)}</Text>
-                <Text style={item.close >= item.open ? styles.klineCloseUp : styles.klineCloseDown}>
+                <Text style={styles.klineNum}>{item.open.toFixed(2)}</Text>
+                <Text style={[styles.klineNum, { color: '#10b981' }]}>{item.high.toFixed(2)}</Text>
+                <Text style={[styles.klineNum, { color: '#ef4444' }]}>{item.low.toFixed(2)}</Text>
+                <Text style={[styles.klineNum, item.close >= item.open ? { color: '#10b981' } : { color: '#ef4444' }]}>
                   {item.close.toFixed(2)}
                 </Text>
-                <Text style={styles.klineVolume}>{(item.volume / 10000).toFixed(0)}</Text>
+                <Text style={styles.klineNum}>{(item.volume / 10000).toFixed(0)}</Text>
               </View>
             ))}
           </ScrollView>
@@ -579,46 +579,36 @@ const styles = StyleSheet.create({
   },
   klineDate: {
     color: '#6b7280',
-    fontSize: 12,
-    width: 70,
-  },
-  klineOpen: {
-    color: '#ffffff',
-    fontSize: 12,
-    width: 55,
-  },
-  klineHigh: {
-    color: '#10b981',
-    fontSize: 12,
-    width: 55,
-  },
-  klineLow: {
-    color: '#ef4444',
-    fontSize: 12,
-    width: 55,
-  },
-  klineCloseUp: {
-    color: '#10b981',
-    fontSize: 12,
-    fontWeight: '500',
-    width: 55,
-  },
-  klineCloseDown: {
-    color: '#ef4444',
-    fontSize: 12,
-    fontWeight: '500',
-    width: 55,
-  },
-  klineHeaderVolume: {
-    color: '#94a3b8',
     fontSize: 11,
-    fontWeight: '500',
-    width: 80,
+    width: 60,
   },
-  klineVolume: {
-    color: '#94a3b8',
-    fontSize: 12,
-    width: 80,
+  klineNum: {
+    color: '#ffffff',
+    fontSize: 11,
+    flex: 1,
+    textAlign: 'center',
+  },
+  klineTableHeader: {
+    flexDirection: 'row',
+    padding: 8,
+    backgroundColor: '#0f3460',
+    borderRadius: 6,
+    marginBottom: 4,
+    borderBottomWidth: 2,
+    borderBottomColor: '#00d4ff',
+  },
+  klineHeaderDate: {
+    color: '#00d4ff',
+    fontSize: 11,
+    fontWeight: 'bold',
+    width: 60,
+  },
+  klineHeaderNum: {
+    color: '#00d4ff',
+    fontSize: 11,
+    fontWeight: 'bold',
+    flex: 1,
+    textAlign: 'center',
   },
   chartToggles: {
     flexDirection: 'row',
@@ -716,45 +706,5 @@ const styles = StyleSheet.create({
     color: '#6b7280',
     fontSize: 12,
     fontWeight: 'bold',
-  },
-  klineHeader: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    padding: 8,
-    backgroundColor: '#0f3460',
-    borderRadius: 6,
-    marginBottom: 4,
-    borderBottomWidth: 2,
-    borderBottomColor: '#00d4ff',
-  },
-  klineHeaderDate: {
-    color: '#00d4ff',
-    fontSize: 12,
-    fontWeight: 'bold',
-    width: 70,
-  },
-  klineHeaderOpen: {
-    color: '#00d4ff',
-    fontSize: 12,
-    fontWeight: 'bold',
-    width: 60,
-  },
-  klineHeaderHigh: {
-    color: '#00d4ff',
-    fontSize: 12,
-    fontWeight: 'bold',
-    width: 60,
-  },
-  klineHeaderLow: {
-    color: '#00d4ff',
-    fontSize: 12,
-    fontWeight: 'bold',
-    width: 60,
-  },
-  klineHeaderClose: {
-    color: '#00d4ff',
-    fontSize: 12,
-    fontWeight: 'bold',
-    width: 60,
   },
 });

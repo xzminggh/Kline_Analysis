@@ -141,9 +141,20 @@ export default function KlineChart({
   const panResponder = useRef(
     PanResponder.create({
       onStartShouldSetPanResponder: () => true,
-      onMoveShouldSetPanResponder: (_, gestureState) => {
+      onStartShouldSetPanResponderCapture: (evt) => {
+        // 双指时立即在捕获阶段拦截
+        return evt.nativeEvent.touches.length === 2;
+      },
+      onMoveShouldSetPanResponder: (evt, gestureState) => {
+        // 双指时立即响应，单指时需移动阈值
+        if (evt.nativeEvent.touches.length === 2) return true;
         return Math.abs(gestureState.dx) > 3 || Math.abs(gestureState.dy) > 3;
       },
+      onMoveShouldSetPanResponderCapture: (evt) => {
+        // 双指移动时在捕获阶段拦截，防止外层ScrollView抢占
+        return evt.nativeEvent.touches.length === 2;
+      },
+      onPanResponderTerminationRequest: () => false,
       onPanResponderGrant: (evt) => {
         movedDuringTouch.current = false;
         if (evt.nativeEvent.touches.length === 2) {
@@ -169,9 +180,11 @@ export default function KlineChart({
           const dx = t[0].locationX - t[1].locationX;
           const dy = t[0].locationY - t[1].locationY;
           const distance = Math.sqrt(dx * dx + dy * dy);
-          const ratio = pinchStartDistance.current / distance;
-          const newVisible = Math.round(pinchStartVisibleCount.current * ratio);
-          setVisibleCount(Math.max(MIN_VISIBLE, Math.min(MAX_VISIBLE, newVisible)));
+          if (distance > 10) {
+            const ratio = pinchStartDistance.current / distance;
+            const newVisible = Math.round(pinchStartVisibleCount.current * ratio);
+            setVisibleCount(Math.max(MIN_VISIBLE, Math.min(MAX_VISIBLE, newVisible)));
+          }
         } else if (evt.nativeEvent.touches.length === 1 && gestureState.dx !== 0) {
           // 单指拖动 - 平移可见范围
           const candlePlusGap = candleWidth + gap;
