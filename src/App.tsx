@@ -37,15 +37,26 @@ export default function App() {
             tabBarStyle: {
               backgroundColor: '#0a0a0f',
               borderTopColor: '#1a1a2e',
+              height: 64,
+              paddingBottom: 8,
+              paddingTop: 8,
+            },
+            tabBarLabelStyle: {
+              fontSize: 14,
+              fontWeight: 'bold',
+              marginBottom: 4,
             },
             tabBarActiveTintColor: '#00d4ff',
             tabBarInactiveTintColor: '#6b7280',
             headerStyle: {
               backgroundColor: '#0a0a0f',
               borderBottomColor: '#1a1a2e',
+              height: 56,
             },
             headerTitleStyle: {
               color: '#ffffff',
+              fontSize: 18,
+              fontWeight: 'bold',
             },
           }}
         >

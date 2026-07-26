@@ -40,6 +40,7 @@ export default function OverviewScreen() {
   const [stockCount, setStockCount] = useState(0);
   const [klineCount, setKlineCount] = useState(0);
   const [meta, setMeta] = useState<Record<string, string>>({});
+  const [showMeta, setShowMeta] = useState(false);
   const [loading, setLoading] = useState(true);
   const [isRunning, setIsRunning] = useState(false);
   const [progress, setProgress] = useState({ current: 0, total: 0 });
@@ -110,7 +111,7 @@ export default function OverviewScreen() {
     try {
       const result = await DocumentPicker.getDocumentAsync({
         type: '*/*',
-        copyToCacheDirectory: true,
+        copyToCacheDirectory: false,
       });
       if (result.canceled) return;
       if (result.assets && result.assets[0]) {
@@ -150,24 +151,6 @@ export default function OverviewScreen() {
     }
   };
 
-  if (loading) {
-    return (
-      <View style={styles.container}>
-        <ActivityIndicator size="large" color="#00d4ff" />
-      </View>
-    );
-  }
-
-  const topRatedStocks = topStocks
-    .filter(s => s.analysis.starRating >= 4)
-    .sort((a, b) => b.analysis.overallScore - a.analysis.overallScore)
-    .slice(0, 10);
-
-  const buySignalStocks = topStocks
-    .filter(s => s.analysis.buySignals >= 3)
-    .sort((a, b) => b.analysis.buySignals - a.analysis.buySignals)
-    .slice(0, 5);
-
   const filteredResults = useMemo(() => {
     let results = [...topStocks];
 
@@ -206,6 +189,24 @@ export default function OverviewScreen() {
 
     return results;
   }, [topStocks, filters]);
+
+  if (loading) {
+    return (
+      <View style={styles.container}>
+        <ActivityIndicator size="large" color="#00d4ff" />
+      </View>
+    );
+  }
+
+  const topRatedStocks = topStocks
+    .filter(s => s.analysis.starRating >= 4)
+    .sort((a, b) => b.analysis.overallScore - a.analysis.overallScore)
+    .slice(0, 10);
+
+  const buySignalStocks = topStocks
+    .filter(s => s.analysis.buySignals >= 3)
+    .sort((a, b) => b.analysis.buySignals - a.analysis.buySignals)
+    .slice(0, 5);
 
   return (
     <ScrollView style={styles.container}>
@@ -422,13 +423,24 @@ export default function OverviewScreen() {
 
       {Object.keys(meta).length > 0 && (
         <View style={styles.section}>
-          <Text style={styles.sectionTitle}>元数据</Text>
-          {Object.entries(meta).map(([key, value]) => (
-            <View key={key} style={styles.infoRow}>
-              <Text style={styles.infoLabel}>{key}:</Text>
-              <Text style={styles.infoValue}>{value}</Text>
+          <TouchableOpacity
+            style={styles.sectionHeader}
+            onPress={() => setShowMeta(!showMeta)}
+            activeOpacity={0.7}
+          >
+            <Text style={styles.sectionTitle}>元数据 ({Object.keys(meta).length})</Text>
+            <Text style={styles.toggleIcon}>{showMeta ? '▼' : '▶'}</Text>
+          </TouchableOpacity>
+          {showMeta && (
+            <View>
+              {Object.entries(meta).map(([key, value]) => (
+                <View key={key} style={styles.infoRow}>
+                  <Text style={styles.infoLabel}>{key}:</Text>
+                  <Text style={styles.infoValue}>{value}</Text>
+                </View>
+              ))}
             </View>
-          ))}
+          )}
         </View>
       )}
     </ScrollView>
@@ -452,6 +464,17 @@ const styles = StyleSheet.create({
     fontSize: 18,
     fontWeight: 'bold',
     marginBottom: 12,
+  },
+  sectionHeader: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    marginBottom: 12,
+  },
+  toggleIcon: {
+    color: '#00d4ff',
+    fontSize: 16,
+    fontWeight: 'bold',
   },
   statusRow: {
     flexDirection: 'row',

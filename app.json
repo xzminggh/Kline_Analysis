@@ -11,7 +11,9 @@
       "resizeMode": "contain",
       "backgroundColor": "#0a0a0f"
     },
-    "assetBundlePatterns": ["**/*"],
+    "assetBundlePatterns": [
+      "**/*"
+    ],
     "ios": {
       "supportsTablet": false,
       "bundleIdentifier": "com.example.kline.screener"
@@ -21,11 +23,23 @@
         "foregroundImage": "./assets/adaptive-icon.png",
         "backgroundColor": "#0a0a0f"
       },
-      "package": "com.example.kline.screener",
-      "permissions": []
+      "package": "com.example.kline.screener"
     },
     "plugins": [
-      ["expo-background-fetch"]
-    ]
+      "expo-sqlite",
+      "expo-sharing",
+      "expo-dev-client"
+    ],
+    "experiments": {
+      "newArch": {
+        "enabled": false
+      }
+    },
+    "extra": {
+      "eas": {
+        "projectId": "3df97e8c-1688-48e6-92c8-b20d4283ccf1"
+      }
+    },
+    "owner": "xzming"
   }
 }

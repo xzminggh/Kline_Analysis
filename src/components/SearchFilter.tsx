@@ -39,7 +39,7 @@ export default function SearchFilter({ totalCount, onFilterChange }: SearchFilte
     onFilterChange(defaultFilters);
   };
 
-  const StarButton({ star }: { star: number }) {
+  const StarButton = ({ star }: { star: number }) => {
     const active = filters.starRating === star;
     return (
       <TouchableOpacity

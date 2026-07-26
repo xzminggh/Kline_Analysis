@@ -2,7 +2,7 @@ import React, { useState, useEffect } from 'react';
 import { View, Text, StyleSheet, ScrollView, TouchableOpacity, ActivityIndicator } from 'react-native';
 import { useDatabase } from '../database/SQLiteProvider';
 import { runAnalysis, getAllAnalysis, getAnalysisSummary, AnalysisResult, generateCSV } from '../services/AnalysisService';
-import * as FileSystem from 'expo-file-system';
+import * as FileSystem from 'expo-file-system/legacy';
 import * as Sharing from 'expo-sharing';
 
 const STRATEGIES = [

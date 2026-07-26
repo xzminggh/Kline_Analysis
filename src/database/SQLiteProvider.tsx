@@ -1,6 +1,8 @@
 import React, { createContext, useContext, useEffect, useState, ReactNode } from 'react';
 import * as SQLite from 'expo-sqlite';
-import * as FileSystem from 'expo-file-system';
+import * as FileSystemLegacy from 'expo-file-system/legacy';
+import { File } from 'expo-file-system';
+import { Buffer } from 'buffer';
 
 export interface Stock {
   code: string;
@@ -28,7 +30,7 @@ export interface DatabaseImportResult {
 }
 
 export interface DatabaseContextType {
-  db: SQLite.Database | null;
+  db: SQLite.SQLiteDatabase | null;
   isConnected: boolean;
   isLoading: boolean;
   getTables: () => Promise<string[]>;
@@ -51,22 +53,24 @@ export const useDatabase = () => {
   return context;
 };
 
+const DB_NAME = 'kline.sqlite';
+const DB_DIR = `${FileSystemLegacy.documentDirectory}SQLite/`;
+
 export const SQLiteProvider: React.FC<{ children: ReactNode }> = ({ children }) => {
-  const [db, setDb] = useState<SQLite.Database | null>(null);
+  const [db, setDb] = useState<SQLite.SQLiteDatabase | null>(null);
   const [isConnected, setIsConnected] = useState(false);
   const [isLoading, setIsLoading] = useState(true);
 
   const copyDatabase = async () => {
-    const dbName = 'kline.sqlite';
-    const localDbPath = `${FileSystem.documentDirectory}SQLite/${dbName}`;
-    const assetDbPath = `${FileSystem.bundleDirectory}kline_1y_smalldemo.sqlite`;
+    const localDbPath = `${DB_DIR}${DB_NAME}`;
+    const assetDbPath = `${FileSystemLegacy.bundleDirectory}kline_1y_smalldemo.sqlite`;
 
-    const localExists = await FileSystem.getInfoAsync(localDbPath);
+    const localExists = await FileSystemLegacy.getInfoAsync(localDbPath);
     if (!localExists.exists) {
-      const assetExists = await FileSystem.getInfoAsync(assetDbPath);
+      const assetExists = await FileSystemLegacy.getInfoAsync(assetDbPath);
       if (assetExists.exists) {
-        await FileSystem.makeDirectoryAsync(`${FileSystem.documentDirectory}SQLite`, { intermediates: true });
-        await FileSystem.copyAsync({
+        await FileSystemLegacy.makeDirectoryAsync(DB_DIR, { intermediates: true });
+        await FileSystemLegacy.copyAsync({
           from: assetDbPath,
           to: localDbPath,
         });
@@ -79,8 +83,10 @@ export const SQLiteProvider: React.FC<{ children: ReactNode }> = ({ children }) 
     const initDatabase = async () => {
       setIsLoading(true);
       try {
-        const dbPath = await copyDatabase();
-        const database = SQLite.openDatabase('kline');
+        await copyDatabase();
+        // 确保目录存在
+        await FileSystemLegacy.makeDirectoryAsync(DB_DIR, { intermediates: true });
+        const database = await SQLite.openDatabaseAsync(DB_NAME, {}, DB_DIR.replace(/\/$/, ''));
         setDb(database);
         setIsConnected(true);
       } catch (error) {
@@ -94,115 +100,129 @@ export const SQLiteProvider: React.FC<{ children: ReactNode }> = ({ children }) 
 
   const getTables = async (): Promise<string[]> => {
     if (!db) return [];
-    return new Promise((resolve) => {
-      db.transaction((tx) => {
-        tx.executeSql("SELECT name FROM sqlite_master WHERE type='table'", [], (_, { rows }) => {
-          const tables: string[] = [];
-          for (let i = 0; i < rows.length; i++) {
-            tables.push(rows.item(i).name);
-          }
-          resolve(tables);
-        });
-      });
-    });
+    try {
+      const rows = await db.getAllAsync<{ name: string }>(
+        "SELECT name FROM sqlite_master WHERE type='table'"
+      );
+      return rows.map((r) => r.name);
+    } catch (error) {
+      console.error('getTables failed:', error);
+      return [];
+    }
   };
 
   const getStockCount = async (): Promise<number> => {
-    if (!db) return 0;
-    return new Promise((resolve) => {
-      db.transaction((tx) => {
-        tx.executeSql('SELECT COUNT(*) as count FROM stocks', [], (_, { rows }) => {
-          resolve(rows.item(0)?.count || 0);
-        });
-      });
-    });
+    if (!db || !isConnected) return 0;
+    try {
+      const row = await db.getFirstAsync<{ count: number }>(
+        'SELECT COUNT(*) as count FROM stocks'
+      );
+      return row?.count || 0;
+    } catch (error: any) {
+      const msg = String(error?.message || error || '');
+      if (!msg.includes('no such table')) {
+        console.error('getStockCount failed:', error);
+      }
+      return 0;
+    }
   };
 
   const getKlineCount = async (): Promise<number> => {
-    if (!db) return 0;
-    return new Promise((resolve) => {
-      db.transaction((tx) => {
-        tx.executeSql('SELECT COUNT(*) as count FROM kline_daily', [], (_, { rows }) => {
-          resolve(rows.item(0)?.count || 0);
-        });
-      });
-    });
+    if (!db || !isConnected) return 0;
+    try {
+      const row = await db.getFirstAsync<{ count: number }>(
+        'SELECT COUNT(*) as count FROM kline_daily'
+      );
+      return row?.count || 0;
+    } catch (error: any) {
+      const msg = String(error?.message || error || '');
+      if (!msg.includes('no such table')) {
+        console.error('getKlineCount failed:', error);
+      }
+      return 0;
+    }
   };
 
   const getStocks = async (): Promise<Stock[]> => {
     if (!db) return [];
-    return new Promise((resolve) => {
-      db.transaction((tx) => {
-        tx.executeSql('SELECT code, name, market, sector_id AS sectorId, status FROM stocks', [], (_, { rows }) => {
-          const stocks: Stock[] = [];
-          for (let i = 0; i < rows.length; i++) {
-            stocks.push(rows.item(i));
-          }
-          resolve(stocks);
-        });
-      });
-    });
+    try {
+      const rows = await db.getAllAsync<Stock>(
+        'SELECT code, name, market, sector_id AS sectorId, status FROM stocks'
+      );
+      return rows;
+    } catch (error) {
+      console.error('getStocks failed:', error);
+      return [];
+    }
   };
 
   const getKlineByCode = async (code: string): Promise<KlineDaily[]> => {
     if (!db) return [];
-    return new Promise((resolve) => {
-      db.transaction((tx) => {
-        tx.executeSql(
-          'SELECT code, date, open, high, low, close, volume, amount FROM kline_daily WHERE code = ? ORDER BY date ASC',
-          [code],
-          (_, { rows }) => {
-            const klines: KlineDaily[] = [];
-            for (let i = 0; i < rows.length; i++) {
-              klines.push(rows.item(i));
-            }
-            resolve(klines);
-          }
-        );
-      });
-    });
+    try {
+      const rows = await db.getAllAsync<KlineDaily>(
+        'SELECT code, date, open, high, low, close, volume, amount FROM kline_daily WHERE code = ? ORDER BY date ASC',
+        [code]
+      );
+      return rows;
+    } catch (error) {
+      console.error('getKlineByCode failed:', error);
+      return [];
+    }
   };
 
   const getMeta = async (): Promise<Record<string, string>> => {
-    if (!db) return {};
-    return new Promise((resolve) => {
-      db.transaction((tx) => {
-        tx.executeSql('SELECT key, value FROM meta', [], (_, { rows }) => {
-          const meta: Record<string, string> = {};
-          for (let i = 0; i < rows.length; i++) {
-            const row = rows.item(i);
-            meta[row.key] = row.value;
-          }
-          resolve(meta);
-        });
-      });
-    });
+    if (!db || !isConnected) return {};
+    try {
+      const rows = await db.getAllAsync<{ key: string; value: string }>(
+        'SELECT key, value FROM meta'
+      );
+      const meta: Record<string, string> = {};
+      for (const row of rows) {
+        meta[row.key] = row.value;
+      }
+      return meta;
+    } catch (error: any) {
+      const msg = String(error?.message || error || '');
+      if (!msg.includes('no such table')) {
+        console.error('getMeta failed:', error);
+      }
+      return {};
+    }
   };
 
   const importDatabase = async (fileUri: string): Promise<DatabaseImportResult> => {
     try {
-      const dbName = 'kline.sqlite';
-      const localDbPath = `${FileSystem.documentDirectory}SQLite/${dbName}`;
+      const localDbPath = `${DB_DIR}${DB_NAME}`;
       const timestamp = Date.now();
-      const backupPath = `${FileSystem.documentDirectory}SQLite/kline_backup_${timestamp}.sqlite`;
+      const backupPath = `${DB_DIR}kline_backup_${timestamp}.sqlite`;
 
-      const localExists = await FileSystem.getInfoAsync(localDbPath);
+      // 关闭当前数据库连接
+      if (db) {
+        await db.closeAsync();
+        setDb(null);
+        setIsConnected(false);
+      }
+
+      await FileSystemLegacy.makeDirectoryAsync(DB_DIR, { intermediates: true });
+
+      const localExists = await FileSystemLegacy.getInfoAsync(localDbPath);
       let createdBackup = '';
       if (localExists.exists) {
-        await FileSystem.copyAsync({
+        await FileSystemLegacy.copyAsync({
           from: localDbPath,
           to: backupPath,
         });
         createdBackup = backupPath;
       }
 
-      await FileSystem.copyAsync({
+      await FileSystemLegacy.copyAsync({
         from: fileUri,
         to: localDbPath,
       });
 
-      const newDb = SQLite.openDatabase('kline');
+      const newDb = await SQLite.openDatabaseAsync(DB_NAME, {}, DB_DIR.replace(/\/$/, ''));
       setDb(newDb);
+      setIsConnected(true);
 
       if (createdBackup) {
         return { success: true, backupPath: createdBackup };
@@ -216,13 +236,12 @@ export const SQLiteProvider: React.FC<{ children: ReactNode }> = ({ children }) 
 
   const getBackupList = async (): Promise<string[]> => {
     try {
-      const sqliteDir = `${FileSystem.documentDirectory}SQLite/`;
-      const dirInfo = await FileSystem.readDirectoryAsync(sqliteDir);
+      const dirInfo = await FileSystemLegacy.readDirectoryAsync(DB_DIR);
       const backups = dirInfo
-        .filter(name => name.startsWith('kline_backup_') && name.endsWith('.sqlite'))
+        .filter((name) => name.startsWith('kline_backup_') && name.endsWith('.sqlite'))
         .sort()
         .reverse()
-        .map(name => `${sqliteDir}${name}`);
+        .map((name) => `${DB_DIR}${name}`);
       return backups;
     } catch (error) {
       console.error('Failed to list backups:', error);
