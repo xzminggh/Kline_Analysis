@@ -1,5 +1,5 @@
-import React, { useMemo, useState, useCallback } from 'react';
-import { View, Text, StyleSheet, Dimensions } from 'react-native';
+import React, { useMemo, useState, useCallback, useRef } from 'react';
+import { View, Text, StyleSheet, Dimensions, PanResponder, TouchableOpacity, Alert } from 'react-native';
 import Svg, { Line, Rect, Text as SvgText, G, Path } from 'react-native-svg';
 import { KlineDaily } from '../database/SQLiteProvider';
 import { calculateMA, calculateBollinger as calculateBOLL } from '../indicators/Indicators';
@@ -14,12 +14,16 @@ interface KlineChartProps {
   showVolume?: boolean;
   colorUp?: string;
   colorDown?: string;
+  defaultVisibleCount?: number;
 }
 
 const { width: SCREEN_WIDTH } = Dimensions.get('window');
-const DEFAULT_HEIGHT = 380;
+const DEFAULT_HEIGHT = 400;
 const VOLUME_HEIGHT = 60;
+const TIME_LABEL_HEIGHT = 20;
 const PADDING = { top: 20, right: 60, bottom: 10, left: 10 };
+const MIN_VISIBLE = 20;
+const MAX_VISIBLE = 500;
 
 export default function KlineChart({
   data,
@@ -31,11 +35,37 @@ export default function KlineChart({
   showVolume = true,
   colorUp = '#10b981',
   colorDown = '#ef4444',
+  defaultVisibleCount = 60,
 }: KlineChartProps) {
   const chartWidth = SCREEN_WIDTH - 40;
-  const priceChartHeight = height - VOLUME_HEIGHT - PADDING.top - PADDING.bottom - 10;
+  const priceChartHeight = height - VOLUME_HEIGHT - TIME_LABEL_HEIGHT - PADDING.top - PADDING.bottom - 10;
 
+  // 视图状态：控制可见K线范围（双指缩放/单指拖动）
+  const [visibleCount, setVisibleCount] = useState(defaultVisibleCount);
+  const [endIndex, setEndIndex] = useState(data.length); // 可见范围结束索引（不含）
   const [touchIndex, setTouchIndex] = useState<number | null>(null);
+
+  // 手势辅助状态
+  const pinchStartDistance = useRef(0);
+  const pinchStartVisibleCount = useRef(0);
+  const panStartOffsetX = useRef(0);
+  const panStartEndIndex = useRef(0);
+  const lastTapTime = useRef(0);
+  const lastTapX = useRef(0);
+  const movedDuringTouch = useRef(false);
+
+  // 数据全量重置时同步 endIndex
+  React.useEffect(() => {
+    setEndIndex(data.length);
+    setVisibleCount(defaultVisibleCount);
+  }, [data, defaultVisibleCount]);
+
+  // 计算可见数据切片
+  const totalCount = data.length;
+  const actualVisible = Math.min(visibleCount, totalCount);
+  const actualEnd = Math.min(Math.max(endIndex, actualVisible), totalCount);
+  const startIndex = Math.max(0, actualEnd - actualVisible);
+  const visibleData = data.slice(startIndex, actualEnd);
 
   const {
     priceMin,
@@ -48,14 +78,14 @@ export default function KlineChart({
     candleWidth,
     gap,
   } = useMemo(() => {
-    if (data.length === 0) {
+    if (visibleData.length === 0) {
       return { priceMin: 0, priceMax: 0, volumeMax: 0, ma5: [], ma10: [], ma20: [], boll: null, candleWidth: 0, gap: 0 };
     }
 
-    const closes = data.map(d => d.close);
-    const highs = data.map(d => d.high);
-    const lows = data.map(d => d.low);
-    const volumes = data.map(d => d.volume);
+    const closes = visibleData.map(d => d.close);
+    const highs = visibleData.map(d => d.high);
+    const lows = visibleData.map(d => d.low);
+    const volumes = visibleData.map(d => d.volume);
 
     let allPrices = [...highs, ...lows];
 
@@ -73,17 +103,22 @@ export default function KlineChart({
     if (ma10.length > 0) allPrices = [...allPrices, ...ma10.filter(v => v > 0)];
     if (ma20.length > 0) allPrices = [...allPrices, ...ma20.filter(v => v > 0)];
 
-    const priceMin = Math.min(...allPrices.filter(v => v > 0)) * 0.98;
-    const priceMax = Math.max(...allPrices.filter(v => v > 0)) * 1.02;
+    const positivePrices = allPrices.filter(v => v > 0);
+    if (positivePrices.length === 0) {
+      return { priceMin: 0, priceMax: 0, volumeMax: 0, ma5, ma10, ma20, boll, candleWidth: 0, gap: 0 };
+    }
+
+    const priceMin = Math.min(...positivePrices) * 0.98;
+    const priceMax = Math.max(...positivePrices) * 1.02;
     const volumeMax = Math.max(...volumes) * 1.1;
 
-    const totalCandles = data.length;
+    const totalCandles = visibleData.length;
     const availableWidth = chartWidth - PADDING.left - PADDING.right;
     const candleWidth = Math.max(2, (availableWidth / totalCandles) * 0.7);
     const gap = Math.max(1, (availableWidth / totalCandles) * 0.3);
 
     return { priceMin, priceMax, volumeMax, ma5, ma10, ma20, boll, candleWidth, gap };
-  }, [data, chartWidth, showMA5, showMA10, showMA20, showBOLL]);
+  }, [visibleData, chartWidth, showMA5, showMA10, showMA20, showBOLL]);
 
   const priceToY = useCallback((price: number): number => {
     if (priceMax === priceMin) return PADDING.top + priceChartHeight / 2;
@@ -102,25 +137,82 @@ export default function KlineChart({
     return PADDING.left + index * (candleWidth + gap) + candleWidth / 2;
   }, [candleWidth, gap]);
 
-  const handleTouch = useCallback((event: any) => {
-    if (data.length === 0) return;
-    const { locationX } = event.nativeEvent;
-    const x = locationX - PADDING.left;
-    const idx = Math.floor(x / (candleWidth + gap));
-    if (idx >= 0 && idx < data.length) {
-      setTouchIndex(idx);
-    }
-  }, [data, candleWidth, gap]);
+  // PanResponder: 双指缩放 + 单指拖动 + 双击重置
+  const panResponder = useRef(
+    PanResponder.create({
+      onStartShouldSetPanResponder: () => true,
+      onMoveShouldSetPanResponder: (_, gestureState) => {
+        return Math.abs(gestureState.dx) > 3 || Math.abs(gestureState.dy) > 3;
+      },
+      onPanResponderGrant: (evt) => {
+        movedDuringTouch.current = false;
+        if (evt.nativeEvent.touches.length === 2) {
+          const t = evt.nativeEvent.touches;
+          const dx = t[0].locationX - t[1].locationX;
+          const dy = t[0].locationY - t[1].locationY;
+          pinchStartDistance.current = Math.sqrt(dx * dx + dy * dy);
+          pinchStartVisibleCount.current = visibleCount;
+        } else if (evt.nativeEvent.touches.length === 1) {
+          panStartOffsetX.current = evt.nativeEvent.locationX;
+          panStartEndIndex.current = actualEnd;
+        }
+      },
+      onPanResponderMove: (evt, gestureState) => {
+        if (Math.abs(gestureState.dx) > 4 || Math.abs(gestureState.dy) > 4) {
+          movedDuringTouch.current = true;
+          setTouchIndex(null);
+        }
 
-  const handleTouchEnd = useCallback(() => {
-    setTouchIndex(null);
-  }, []);
+        if (evt.nativeEvent.touches.length === 2 && pinchStartDistance.current > 0) {
+          // 双指缩放
+          const t = evt.nativeEvent.touches;
+          const dx = t[0].locationX - t[1].locationX;
+          const dy = t[0].locationY - t[1].locationY;
+          const distance = Math.sqrt(dx * dx + dy * dy);
+          const ratio = pinchStartDistance.current / distance;
+          const newVisible = Math.round(pinchStartVisibleCount.current * ratio);
+          setVisibleCount(Math.max(MIN_VISIBLE, Math.min(MAX_VISIBLE, newVisible)));
+        } else if (evt.nativeEvent.touches.length === 1 && gestureState.dx !== 0) {
+          // 单指拖动 - 平移可见范围
+          const candlePlusGap = candleWidth + gap;
+          if (candlePlusGap > 0) {
+            const movedCandles = Math.round(gestureState.dx / candlePlusGap);
+            const newEnd = panStartEndIndex.current - movedCandles;
+            setEndIndex(Math.max(actualVisible, Math.min(totalCount, newEnd)));
+          }
+        }
+      },
+      onPanResponderRelease: (evt) => {
+        pinchStartDistance.current = 0;
+        // 双击检测
+        if (!movedDuringTouch.current && evt.nativeEvent.touches.length === 0) {
+          const now = Date.now();
+          const tapX = evt.nativeEvent.locationX;
+          if (now - lastTapTime.current < 300 && Math.abs(tapX - lastTapX.current) < 30) {
+            // 双击 - 重置
+            setVisibleCount(defaultVisibleCount);
+            setEndIndex(totalCount);
+            setTouchIndex(null);
+          } else {
+            // 单击 - 显示十字光标
+            const x = tapX - PADDING.left;
+            const idx = Math.floor(x / (candleWidth + gap));
+            if (idx >= 0 && idx < visibleData.length) {
+              setTouchIndex(idx);
+            }
+          }
+          lastTapTime.current = now;
+          lastTapX.current = tapX;
+        }
+      },
+    })
+  ).current;
 
   const renderCandles = () => {
-    if (data.length === 0) return null;
+    if (visibleData.length === 0) return null;
     const priceBottom = PADDING.top + priceChartHeight + 10;
 
-    return data.map((d, i) => {
+    return visibleData.map((d, i) => {
       const x = indexToX(i);
       const openY = priceToY(d.open);
       const closeY = priceToY(d.close);
@@ -221,17 +313,43 @@ export default function KlineChart({
         </SvgText>
       );
     }
-    // 成交量分隔线
     gridElements.push(
       <Line key="vol-sep" x1={PADDING.left} y1={priceBottom} x2={chartWidth - PADDING.right} y2={priceBottom} stroke="#0f3460" strokeWidth={1} strokeDasharray="3,3" />
     );
     return gridElements;
   };
 
+  const renderTimeLabels = () => {
+    if (visibleData.length === 0) return null;
+    const labels = [];
+    const step = Math.max(1, Math.floor(visibleData.length / 6));
+    const priceBottom = PADDING.top + priceChartHeight + 10;
+    const labelY = priceBottom + VOLUME_HEIGHT + 4;
+
+    for (let i = 0; i < visibleData.length; i += step) {
+      const x = indexToX(i);
+      const date = visibleData[i].date;
+      const displayDate = date.length > 5 ? date.substring(5) : date;
+      labels.push(
+        <SvgText
+          key={`time-${i}`}
+          x={x}
+          y={labelY}
+          fontSize={9}
+          fill="#6b7280"
+          textAnchor="middle"
+        >
+          {displayDate}
+        </SvgText>
+      );
+    }
+    return labels;
+  };
+
   const renderCrosshair = () => {
-    if (touchIndex === null || data.length === 0) return null;
+    if (touchIndex === null || visibleData.length === 0) return null;
     const x = indexToX(touchIndex);
-    const d = data[touchIndex];
+    const d = visibleData[touchIndex];
     const priceBottom = PADDING.top + priceChartHeight + 10;
 
     return (
@@ -244,10 +362,10 @@ export default function KlineChart({
   };
 
   const renderDataPanel = () => {
-    if (touchIndex === null || data.length === 0) return null;
-    const d = data[touchIndex];
+    if (touchIndex === null || visibleData.length === 0) return null;
+    const d = visibleData[touchIndex];
     const change = d.close - d.open;
-    const changePct = (change / d.open * 100).toFixed(2);
+    const changePct = d.open > 0 ? (change / d.open * 100).toFixed(2) : '0.00';
     const isUp = d.close >= d.open;
 
     return (
@@ -294,14 +412,17 @@ export default function KlineChart({
 
   return (
     <View style={styles.container}>
-      <View style={[styles.chartWrapper, { height }]}>
-        <Svg
-          width={chartWidth}
-          height={height}
-          onTouchStart={handleTouch}
-          onTouchMove={handleTouch}
-          onTouchEnd={handleTouchEnd}
-        >
+      <View style={styles.rangeInfo}>
+        <Text style={styles.rangeInfoText}>
+          显示 {startIndex + 1}-{actualEnd} / 共 {totalCount} 条
+        </Text>
+        <Text style={styles.rangeInfoHint}>双指缩放 · 双击重置 · 单指拖动平移</Text>
+      </View>
+      <View
+        style={[styles.chartWrapper, { height }]}
+        {...panResponder.panHandlers}
+      >
+        <Svg width={chartWidth} height={height}>
           {renderPriceGrid()}
           {showBOLL && renderBollinger()}
           {showMA5 && renderMALine(ma5, '#00d4ff')}
@@ -309,6 +430,7 @@ export default function KlineChart({
           {showMA20 && renderMALine(ma20, '#fbbf24')}
           {renderCandles()}
           {renderCrosshair()}
+          {renderTimeLabels()}
         </Svg>
         {touchIndex !== null && renderDataPanel()}
       </View>
@@ -353,6 +475,23 @@ const styles = StyleSheet.create({
     backgroundColor: '#0a0a0f',
     borderRadius: 12,
     overflow: 'hidden',
+  },
+  rangeInfo: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    paddingHorizontal: 12,
+    paddingVertical: 6,
+    backgroundColor: '#0f3460',
+  },
+  rangeInfoText: {
+    color: '#00d4ff',
+    fontSize: 11,
+    fontWeight: 'bold',
+  },
+  rangeInfoHint: {
+    color: '#6b7280',
+    fontSize: 10,
   },
   chartWrapper: {
     justifyContent: 'center',

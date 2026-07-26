@@ -157,17 +157,35 @@ export function getFilteredResults(
 }
 
 export function generateCSV(results: AnalysisResult[]): string {
+  // 动态计算策略列数：取所有结果中策略数最大值，至少25列
+  const maxStrategyCount = Math.max(
+    25,
+    ...results.map(r => r.analysis.strategies.length)
+  );
+  const padLength = Math.max(0, maxStrategyCount);
+
   const headers = [
     '代码', '名称', '星级', '总分', '买入信号', '卖出信号',
     '最新价', '涨跌幅', '成交量',
-    ...Array.from({ length: 25 }, (_, i) => `策略${i + 1}_信号`),
-    ...Array.from({ length: 25 }, (_, i) => `策略${i + 1}_得分`),
+    ...Array.from({ length: maxStrategyCount }, (_, i) => `策略${i + 1}_ID`),
+    ...Array.from({ length: maxStrategyCount }, (_, i) => `策略${i + 1}_名称`),
+    ...Array.from({ length: maxStrategyCount }, (_, i) => `策略${i + 1}_信号`),
+    ...Array.from({ length: maxStrategyCount }, (_, i) => `策略${i + 1}_得分`),
+    ...Array.from({ length: maxStrategyCount }, (_, i) => `策略${i + 1}_详情`),
   ];
 
   const rows = results.map(result => {
     const strategies = result.analysis.strategies;
-    const signalColumns = strategies.map(s => s.signal).concat(Array(25 - strategies.length).fill(''));
-    const scoreColumns = strategies.map(s => s.score).concat(Array(25 - strategies.length).fill(''));
+    const pad = (arr: any[]) => {
+      const padCount = Math.max(0, padLength - arr.length);
+      return arr.concat(new Array(padCount).fill(''));
+    };
+
+    const idColumns = pad(strategies.map(s => s.id));
+    const nameColumns = pad(strategies.map(s => s.name));
+    const signalColumns = pad(strategies.map(s => s.signal));
+    const scoreColumns = pad(strategies.map(s => s.score));
+    const detailColumns = pad(strategies.map(s => s.details));
 
     const latestKline = result.latestKline;
     const change = latestKline ? ((latestKline.close - latestKline.open) / latestKline.open * 100).toFixed(2) : '';
@@ -184,8 +202,11 @@ export function generateCSV(results: AnalysisResult[]): string {
       price,
       change,
       volume,
+      ...idColumns,
+      ...nameColumns,
       ...signalColumns,
       ...scoreColumns,
+      ...detailColumns,
     ].join(',');
   });
 

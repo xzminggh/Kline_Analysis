@@ -137,7 +137,7 @@ export default function StrategyScreen() {
       <View style={styles.container}>
         <View style={styles.centered}>
           <ActivityIndicator size="large" color="#00d4ff" />
-          <Text style={styles.runningText}>正在运行25个策略分析...</Text>
+          <Text style={styles.runningText}>正在运行26个策略分析...</Text>
           <Text style={styles.progressText}>{progress.current} / {progress.total} ({pct}%)</Text>
           <Text style={styles.runningSubText}>分片调度中，请稍候</Text>
         </View>
@@ -164,35 +164,16 @@ export default function StrategyScreen() {
 
       {showResults && summary && (
         <View style={styles.section}>
-          <Text style={styles.sectionTitle}>分析概览</Text>
-          <View style={styles.statsGrid}>
-            <View style={styles.statCard}>
-              <Text style={styles.statValue}>{summary.analyzedStocks}</Text>
-              <Text style={styles.statLabel}>分析股票</Text>
-            </View>
-            <View style={styles.statCard}>
-              <Text style={styles.statValue}>{summary.buySignals}</Text>
-              <Text style={styles.statLabel}>买入信号</Text>
-            </View>
-            <View style={styles.statCard}>
-              <Text style={styles.statValue}>{summary.sellSignals}</Text>
-              <Text style={styles.statLabel}>卖出信号</Text>
-            </View>
-            <View style={styles.statCard}>
-              <Text style={styles.statValue}>{summary.star5Count}</Text>
-              <Text style={styles.statLabel}>5星股票</Text>
-            </View>
+          <View style={styles.resultHeader}>
+            <Text style={styles.sectionTitle}>筛选结果 Top20</Text>
+            <TouchableOpacity style={styles.exportButton} onPress={handleExportCSV}>
+              <Text style={styles.exportButtonText}>导出CSV</Text>
+            </TouchableOpacity>
           </View>
-          <TouchableOpacity style={styles.exportButton} onPress={handleExportCSV}>
-            <Text style={styles.exportButtonText}>导出CSV报告</Text>
-          </TouchableOpacity>
-        </View>
-      )}
-
-      {showResults && (
-        <View style={styles.section}>
-          <Text style={styles.sectionTitle}>筛选结果</Text>
-          <View style={styles.resultList}>
+          <Text style={styles.hintText}>
+            共 {summary.analyzedStocks} 只 · 买入 {summary.buySignals} · 卖出 {summary.sellSignals} · 5星 {summary.star5Count}
+          </Text>
+          <ScrollView style={styles.resultList}>
             {analysisResults
               .sort((a, b) => b.analysis.overallScore - a.analysis.overallScore)
               .slice(0, 20)
@@ -218,7 +199,7 @@ export default function StrategyScreen() {
                   </View>
                 </View>
               ))}
-          </View>
+          </ScrollView>
         </View>
       )}
 
@@ -239,7 +220,7 @@ export default function StrategyScreen() {
 
       <View style={styles.section}>
         <Text style={styles.sectionTitle}>策略列表</Text>
-        <View style={styles.strategyList}>
+        <ScrollView style={styles.strategyList}>
           {filteredStrategies.map(strategy => (
             <TouchableOpacity
               key={strategy.id}
@@ -255,7 +236,7 @@ export default function StrategyScreen() {
               </View>
             </TouchableOpacity>
           ))}
-        </View>
+        </ScrollView>
       </View>
     </ScrollView>
   );
@@ -307,14 +288,13 @@ const styles = StyleSheet.create({
   },
   exportButton: {
     backgroundColor: '#10b981',
-    padding: 12,
-    borderRadius: 8,
-    alignItems: 'center',
-    marginTop: 12,
+    paddingHorizontal: 14,
+    paddingVertical: 8,
+    borderRadius: 6,
   },
   exportButtonText: {
     color: '#ffffff',
-    fontSize: 16,
+    fontSize: 13,
     fontWeight: 'bold',
   },
   centered: {
@@ -361,8 +341,19 @@ const styles = StyleSheet.create({
     fontSize: 12,
     marginTop: 4,
   },
+  resultHeader: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    marginBottom: 4,
+  },
+  hintText: {
+    color: '#94a3b8',
+    fontSize: 12,
+    marginBottom: 12,
+  },
   resultList: {
-    maxHeight: 400,
+    maxHeight: 600,
   },
   resultItem: {
     padding: 12,

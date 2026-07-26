@@ -50,6 +50,8 @@ export default function DetailScreen() {
     showMA20: true,
     showBOLL: false,
   });
+  // 用户输入历史（内存缓存，不持久化）
+  const [inputHistory, setInputHistory] = useState<string[]>([]);
 
   useEffect(() => {
     const loadStockList = async () => {
@@ -58,6 +60,13 @@ export default function DetailScreen() {
     };
     loadStockList();
   }, [getStocks]);
+
+  // 监听路由参数变化（从概览页点击跳转过来）
+  useEffect(() => {
+    if (routeParams.stockCode && routeParams.stockCode !== code) {
+      setCode(routeParams.stockCode);
+    }
+  }, [routeParams.stockCode]);
 
   useEffect(() => {
     if (code) {
@@ -102,36 +111,62 @@ export default function DetailScreen() {
     }
   };
 
+  // 提交输入：加载股票并加入历史
+  const handleSubmitCode = () => {
+    const trimmed = code.trim();
+    if (!trimmed) return;
+    setInputHistory(prev => {
+      const filtered = prev.filter(c => c !== trimmed);
+      return [trimmed, ...filtered].slice(0, 20);
+    });
+    loadKlineData();
+  };
+
   const latestData = klineData[klineData.length - 1];
+  // 关联股票名称
+  const currentStockName = stockList.find(s => s.code === code)?.name || '未知';
+  // 时间戳：最新K线日期
+  const latestDate = latestData?.date || '--';
 
   return (
     <ScrollView style={styles.container}>
       <View style={styles.section}>
-        <Text style={styles.sectionTitle}>股票代码</Text>
-        <TextInput
-          style={styles.input}
-          value={code}
-          onChangeText={setCode}
-          placeholder="输入股票代码"
-          placeholderTextColor="#6b7280"
-          keyboardType="numeric"
-        />
-        {stockList.length > 0 && (
+        <View style={styles.stockHeader}>
+          <View style={styles.stockHeaderLeft}>
+            <Text style={styles.sectionTitle}>{code}</Text>
+            <Text style={styles.stockNameDisplay}>{currentStockName}</Text>
+          </View>
+          <Text style={styles.timestamp}>数据日期: {latestDate}</Text>
+        </View>
+        <View style={styles.inputRow}>
+          <TextInput
+            style={styles.input}
+            value={code}
+            onChangeText={setCode}
+            placeholder="输入股票代码"
+            placeholderTextColor="#6b7280"
+            keyboardType="numeric"
+          />
+          <TouchableOpacity style={styles.loadBtn} onPress={handleSubmitCode}>
+            <Text style={styles.loadBtnText}>加载</Text>
+          </TouchableOpacity>
+        </View>
+        {inputHistory.length > 0 && (
           <View style={styles.suggestions}>
-            <Text style={styles.suggestionsTitle}>热门股票:</Text>
+            <Text style={styles.suggestionsTitle}>最近输入:</Text>
             <View style={styles.suggestionsScroll}>
-              {stockList.slice(0, 10).map(s => (
+              {inputHistory.map(c => (
                 <TouchableOpacity
-                  key={s.code}
-                  style={styles.suggestionItem}
-                  onPress={() => setCode(s.code)}
+                  key={c}
+                  style={[styles.suggestionItem, c === code && styles.suggestionItemActive]}
+                  onPress={() => setCode(c)}
                 >
-                  <Text style={styles.suggestionText}>{s.code}</Text>
+                  <Text style={[styles.suggestionText, c === code && styles.suggestionTextActive]}>{c}</Text>
                 </TouchableOpacity>
               ))}
             </View>
           </View>
-      )}
+        )}
       </View>
 
       {loading ? (
@@ -200,15 +235,18 @@ export default function DetailScreen() {
               </View>
 
               <View style={styles.strategyResults}>
-                <Text style={styles.subTitle}>买入信号策略:</Text>
+                <Text style={styles.subTitle}>买入信号策略 ({analysis.strategies.filter(s => s.signal === 'BUY').length}):</Text>
                 <View style={styles.strategyList}>
                   {analysis.strategies
                     .filter(s => s.signal === 'BUY')
                     .map(s => (
-                      <View key={s.id} style={styles.strategyRow}>
-                        <Text style={styles.strategyId}>{s.id}</Text>
-                        <Text style={styles.strategyName}>{s.name}</Text>
-                        <Text style={styles.strategyScore}>{s.score}</Text>
+                      <View key={s.id} style={styles.strategyDetailRow}>
+                        <View style={styles.strategyHeader}>
+                          <Text style={styles.strategyId}>{s.id}</Text>
+                          <Text style={styles.strategyName}>{s.name}</Text>
+                          <Text style={styles.strategyScore}>+{s.score}</Text>
+                        </View>
+                        <Text style={styles.strategyDetails}>{s.details}</Text>
                       </View>
                     ))}
                   {analysis.strategies.filter(s => s.signal === 'BUY').length === 0 && (
@@ -218,20 +256,41 @@ export default function DetailScreen() {
               </View>
 
               <View style={styles.strategyResults}>
-                <Text style={styles.subTitle}>卖出信号策略:</Text>
+                <Text style={styles.subTitle}>卖出信号策略 ({analysis.strategies.filter(s => s.signal === 'SELL').length}):</Text>
                 <View style={styles.strategyList}>
                   {analysis.strategies
                     .filter(s => s.signal === 'SELL')
                     .map(s => (
-                      <View key={s.id} style={styles.strategyRow}>
-                        <Text style={styles.strategyId}>{s.id}</Text>
-                        <Text style={styles.strategyName}>{s.name}</Text>
-                        <Text style={styles.strategyScoreNegative}>{s.score}</Text>
+                      <View key={s.id} style={styles.strategyDetailRow}>
+                        <View style={styles.strategyHeader}>
+                          <Text style={styles.strategyId}>{s.id}</Text>
+                          <Text style={styles.strategyName}>{s.name}</Text>
+                          <Text style={styles.strategyScoreNegative}>{s.score}</Text>
+                        </View>
+                        <Text style={styles.strategyDetails}>{s.details}</Text>
                       </View>
                     ))}
                   {analysis.strategies.filter(s => s.signal === 'SELL').length === 0 && (
                     <Text style={styles.emptyText}>暂无卖出信号</Text>
                   )}
+                </View>
+              </View>
+
+              <View style={styles.strategyResults}>
+                <Text style={styles.subTitle}>未触发策略 ({analysis.strategies.filter(s => s.signal === 'NEUTRAL').length}):</Text>
+                <View style={styles.strategyList}>
+                  {analysis.strategies
+                    .filter(s => s.signal === 'NEUTRAL')
+                    .map(s => (
+                      <View key={s.id} style={styles.strategyDetailRowNeutral}>
+                        <View style={styles.strategyHeader}>
+                          <Text style={styles.strategyId}>{s.id}</Text>
+                          <Text style={styles.strategyName}>{s.name}</Text>
+                          <Text style={styles.strategyScoreNeutral}>0</Text>
+                        </View>
+                        <Text style={styles.strategyDetails}>{s.details}</Text>
+                      </View>
+                    ))}
                 </View>
               </View>
             </>
@@ -270,12 +329,13 @@ export default function DetailScreen() {
           </View>
           <ErrorBoundary>
             <KlineChart
-              data={klineData.slice(-60)}
+              data={klineData}
               height={300}
               showMA5={chartSettings.showMA5}
               showMA10={chartSettings.showMA10}
               showMA20={chartSettings.showMA20}
               showBOLL={chartSettings.showBOLL}
+              defaultVisibleCount={60}
             />
           </ErrorBoundary>
         </View>
@@ -283,9 +343,17 @@ export default function DetailScreen() {
 
       {klineData.length > 0 && (
         <View style={styles.section}>
-          <Text style={styles.sectionTitle}>历史K线 ({klineData.length}条)</Text>
-          <View style={styles.klineList}>
-            {klineData.slice(-20).reverse().map((item, index) => (
+          <Text style={styles.sectionTitle}>历史K线 (共{klineData.length}条，倒序)</Text>
+          <View style={styles.klineHeader}>
+            <Text style={styles.klineHeaderDate}>日期</Text>
+            <Text style={styles.klineHeaderOpen}>开盘</Text>
+            <Text style={styles.klineHeaderHigh}>最高</Text>
+            <Text style={styles.klineHeaderLow}>最低</Text>
+            <Text style={styles.klineHeaderClose}>收盘</Text>
+            <Text style={styles.klineHeaderVolume}>成交量(万)</Text>
+          </View>
+          <ScrollView style={styles.klineList}>
+            {[...klineData].reverse().map((item, index) => (
               <View key={index} style={styles.klineRow}>
                 <Text style={styles.klineDate}>{item.date}</Text>
                 <Text style={styles.klineOpen}>{item.open.toFixed(2)}</Text>
@@ -294,9 +362,10 @@ export default function DetailScreen() {
                 <Text style={item.close >= item.open ? styles.klineCloseUp : styles.klineCloseDown}>
                   {item.close.toFixed(2)}
                 </Text>
+                <Text style={styles.klineVolume}>{(item.volume / 10000).toFixed(0)}</Text>
               </View>
             ))}
-          </View>
+          </ScrollView>
         </View>
       )}
     </ScrollView>
@@ -499,7 +568,7 @@ const styles = StyleSheet.create({
     fontSize: 16,
   },
   klineList: {
-    // 移除maxHeight，使用外层ScrollView滚动
+    maxHeight: 300,
   },
   klineRow: {
     flexDirection: 'row',
@@ -516,29 +585,40 @@ const styles = StyleSheet.create({
   klineOpen: {
     color: '#ffffff',
     fontSize: 12,
-    width: 60,
+    width: 55,
   },
   klineHigh: {
     color: '#10b981',
     fontSize: 12,
-    width: 60,
+    width: 55,
   },
   klineLow: {
     color: '#ef4444',
     fontSize: 12,
-    width: 60,
+    width: 55,
   },
   klineCloseUp: {
     color: '#10b981',
     fontSize: 12,
     fontWeight: '500',
-    width: 60,
+    width: 55,
   },
   klineCloseDown: {
     color: '#ef4444',
     fontSize: 12,
     fontWeight: '500',
-    width: 60,
+    width: 55,
+  },
+  klineHeaderVolume: {
+    color: '#94a3b8',
+    fontSize: 11,
+    fontWeight: '500',
+    width: 80,
+  },
+  klineVolume: {
+    color: '#94a3b8',
+    fontSize: 12,
+    width: 80,
   },
   chartToggles: {
     flexDirection: 'row',
@@ -561,5 +641,120 @@ const styles = StyleSheet.create({
   },
   toggleBtnTextActive: {
     color: '#0a0a0f',
+  },
+  // 新增样式
+  stockHeader: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'flex-start',
+    marginBottom: 12,
+  },
+  stockHeaderLeft: {
+    flexDirection: 'row',
+    alignItems: 'baseline',
+    gap: 12,
+  },
+  stockNameDisplay: {
+    color: '#ffffff',
+    fontSize: 16,
+    fontWeight: '500',
+  },
+  timestamp: {
+    color: '#6b7280',
+    fontSize: 12,
+  },
+  inputRow: {
+    flexDirection: 'row',
+    gap: 8,
+  },
+  loadBtn: {
+    backgroundColor: '#00d4ff',
+    paddingHorizontal: 16,
+    justifyContent: 'center',
+    borderRadius: 8,
+  },
+  loadBtnText: {
+    color: '#0a0a0f',
+    fontSize: 14,
+    fontWeight: 'bold',
+  },
+  suggestionItemActive: {
+    backgroundColor: '#00d4ff',
+  },
+  suggestionTextActive: {
+    color: '#0a0a0f',
+    fontWeight: 'bold',
+  },
+  strategyDetailRow: {
+    padding: 8,
+    backgroundColor: '#0f3460',
+    borderRadius: 6,
+    marginBottom: 4,
+    borderLeftWidth: 3,
+    borderLeftColor: '#10b981',
+  },
+  strategyDetailRowNeutral: {
+    padding: 8,
+    backgroundColor: '#1a1a2e',
+    borderRadius: 6,
+    marginBottom: 4,
+    borderLeftWidth: 3,
+    borderLeftColor: '#6b7280',
+    opacity: 0.7,
+  },
+  strategyHeader: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    marginBottom: 4,
+  },
+  strategyDetails: {
+    color: '#94a3b8',
+    fontSize: 11,
+    marginLeft: 8,
+  },
+  strategyScoreNeutral: {
+    color: '#6b7280',
+    fontSize: 12,
+    fontWeight: 'bold',
+  },
+  klineHeader: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    padding: 8,
+    backgroundColor: '#0f3460',
+    borderRadius: 6,
+    marginBottom: 4,
+    borderBottomWidth: 2,
+    borderBottomColor: '#00d4ff',
+  },
+  klineHeaderDate: {
+    color: '#00d4ff',
+    fontSize: 12,
+    fontWeight: 'bold',
+    width: 70,
+  },
+  klineHeaderOpen: {
+    color: '#00d4ff',
+    fontSize: 12,
+    fontWeight: 'bold',
+    width: 60,
+  },
+  klineHeaderHigh: {
+    color: '#00d4ff',
+    fontSize: 12,
+    fontWeight: 'bold',
+    width: 60,
+  },
+  klineHeaderLow: {
+    color: '#00d4ff',
+    fontSize: 12,
+    fontWeight: 'bold',
+    width: 60,
+  },
+  klineHeaderClose: {
+    color: '#00d4ff',
+    fontSize: 12,
+    fontWeight: 'bold',
+    width: 60,
   },
 });

@@ -5,6 +5,7 @@ import { useDatabase } from '../database/SQLiteProvider';
 import { getAnalysisSummary, getAllAnalysis, runAnalysis, getFilteredResults } from '../services/AnalysisService';
 import * as DocumentPicker from 'expo-document-picker';
 import SearchFilter, { FilterState } from '../components/SearchFilter';
+import Dashboard from '../components/Dashboard';
 
 function StarRating({ rating }: { rating: number }) {
   return (
@@ -198,16 +199,6 @@ export default function OverviewScreen() {
     );
   }
 
-  const topRatedStocks = topStocks
-    .filter(s => s.analysis.starRating >= 4)
-    .sort((a, b) => b.analysis.overallScore - a.analysis.overallScore)
-    .slice(0, 10);
-
-  const buySignalStocks = topStocks
-    .filter(s => s.analysis.buySignals >= 3)
-    .sort((a, b) => b.analysis.buySignals - a.analysis.buySignals)
-    .slice(0, 5);
-
   return (
     <ScrollView style={styles.container}>
       <View style={styles.section}>
@@ -242,24 +233,7 @@ export default function OverviewScreen() {
       {summary && (
         <View style={styles.section}>
           <Text style={styles.sectionTitle}>分析概览</Text>
-          <View style={styles.statsGrid}>
-            <View style={styles.statCard}>
-              <Text style={styles.statValue}>{summary.analyzedStocks}</Text>
-              <Text style={styles.statLabel}>分析股票</Text>
-            </View>
-            <View style={styles.statCard}>
-              <Text style={styles.statValue}>{summary.buySignals}</Text>
-              <Text style={styles.statLabel}>买入信号</Text>
-            </View>
-            <View style={styles.statCard}>
-              <Text style={styles.statValue}>{summary.sellSignals}</Text>
-              <Text style={styles.statLabel}>卖出信号</Text>
-            </View>
-            <View style={styles.statCard}>
-              <Text style={styles.statValue}>{summary.star5Count}</Text>
-              <Text style={styles.statLabel}>5星股票</Text>
-            </View>
-          </View>
+          <Dashboard summary={summary} />
           <TouchableOpacity
             style={styles.runButton}
             onPress={handleRunAnalysis}
@@ -302,8 +276,25 @@ export default function OverviewScreen() {
 
       {filteredResults.length > 0 && (
         <View style={styles.section}>
-          <Text style={styles.sectionTitle}>筛选结果</Text>
-          <View style={styles.stockList}>
+          <Text style={styles.sectionTitle}>筛选结果 ({filteredResults.length})</Text>
+          <ScrollView horizontal style={styles.starTabs}>
+            <TouchableOpacity
+              style={[styles.starTab, filters.starRating === null && styles.starTabActive]}
+              onPress={() => setFilters(f => ({ ...f, starRating: null }))}
+            >
+              <Text style={[styles.starTabText, filters.starRating === null && styles.starTabTextActive]}>全部</Text>
+            </TouchableOpacity>
+            {[5, 4, 3, 2, 1].map(star => (
+              <TouchableOpacity
+                key={star}
+                style={[styles.starTab, filters.starRating === star && styles.starTabActive]}
+                onPress={() => setFilters(f => ({ ...f, starRating: star }))}
+              >
+                <Text style={[styles.starTabText, filters.starRating === star && styles.starTabTextActive]}>{star}星</Text>
+              </TouchableOpacity>
+            ))}
+          </ScrollView>
+          <ScrollView style={styles.stockList}>
             {filteredResults.map(result => (
               <TouchableOpacity
                 key={result.stock.code}
@@ -344,7 +335,7 @@ export default function OverviewScreen() {
                 </View>
               </TouchableOpacity>
             ))}
-          </View>
+          </ScrollView>
         </View>
       )}
 
@@ -354,60 +345,11 @@ export default function OverviewScreen() {
         </View>
       )}
 
-      {topRatedStocks.length > 0 && (
-        <View style={styles.section}>
-          <Text style={styles.sectionTitle}>高评分股票 (4星及以上)</Text>
-          <View style={styles.stockList}>
-            {topRatedStocks.map(result => (
-              <View key={result.stock.code} style={styles.stockItem}>
-                <View style={styles.stockLeft}>
-                  <Text style={styles.stockCode}>{result.stock.code}</Text>
-                  <Text style={styles.stockName}>{result.stock.name}</Text>
-                </View>
-                <View style={styles.stockRight}>
-                  <StarRating rating={result.analysis.starRating} />
-                  <Text style={styles.stockScore}>{result.analysis.overallScore}分</Text>
-                </View>
-                {result.latestKline && (
-                  <View style={styles.stockPrice}>
-                    <Text style={styles.priceValue}>{result.latestKline.close.toFixed(2)}</Text>
-                    <Text style={result.latestKline.close >= result.latestKline.open ? styles.priceUp : styles.priceDown}>
-                      {result.latestKline.close >= result.latestKline.open ? '+' : ''}
-                      {((result.latestKline.close - result.latestKline.open) / result.latestKline.open * 100).toFixed(2)}%
-                    </Text>
-                  </View>
-                )}
-              </View>
-            ))}
-          </View>
-        </View>
-      )}
-
-      {buySignalStocks.length > 0 && (
-        <View style={styles.section}>
-          <Text style={styles.sectionTitle}>买入信号较多股票 (≥3个)</Text>
-          <View style={styles.signalList}>
-            {buySignalStocks.map(result => (
-              <View key={result.stock.code} style={styles.signalItem}>
-                <View style={styles.signalLeft}>
-                  <Text style={styles.signalCode}>{result.stock.code}</Text>
-                  <Text style={styles.signalName}>{result.stock.name}</Text>
-                </View>
-                <View style={styles.signalRight}>
-                  <SignalBadge signal="BUY" />
-                  <Text style={styles.signalCount}>{result.analysis.buySignals}个</Text>
-                </View>
-              </View>
-            ))}
-          </View>
-        </View>
-      )}
-
       {!summary && isConnected && (
         <View style={styles.section}>
           <Text style={styles.sectionTitle}>开始分析</Text>
           <View style={styles.emptyAnalysis}>
-            <Text style={styles.emptyAnalysisText}>点击下方按钮开始运行25个策略分析</Text>
+            <Text style={styles.emptyAnalysisText}>点击下方按钮开始运行26个策略分析</Text>
             <TouchableOpacity
               style={styles.runButton}
               onPress={handleRunAnalysis}
@@ -578,8 +520,30 @@ const styles = StyleSheet.create({
     fontSize: 12,
     marginTop: 4,
   },
+  starTabs: {
+    flexDirection: 'row',
+    marginBottom: 12,
+  },
+  starTab: {
+    backgroundColor: '#0f3460',
+    paddingHorizontal: 12,
+    paddingVertical: 6,
+    borderRadius: 6,
+    marginRight: 8,
+  },
+  starTabActive: {
+    backgroundColor: '#00d4ff',
+  },
+  starTabText: {
+    color: '#ffffff',
+    fontSize: 12,
+  },
+  starTabTextActive: {
+    color: '#0a0a0f',
+    fontWeight: 'bold',
+  },
   stockList: {
-    // 移除maxHeight限制，让外层ScrollView自然滚动
+    maxHeight: 400,
   },
   stockItem: {
     padding: 12,
