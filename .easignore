@@ -1,0 +1,28 @@
+# 构建产物（不需要上传）
+node_modules/
+.android/
+.ios/
+build/
+.cxx/
+.gradle/
+.expo/
+dist/
+web-build/
+
+# 文档和辅助文件（不需要打包进APK）
+*.md
+*.loop.json
+*.loop.md
+lessons_learned_*.md
+kline-app-dev.loop.*
+
+# 脚本目录（不需要打包）
+scripts/
+
+# Git相关
+.git/
+
+# 临时文件
+*.log
+*.orig.*
+icon_temp.jpeg
