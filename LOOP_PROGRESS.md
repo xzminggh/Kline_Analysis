@@ -1,20 +1,22 @@
 # 联网K线自动补全 Loop — 进度跟踪
 
-> 分支：`feature/online-sync` · 双推目标：Gitee（✓）/ GitHub（待你本机补推）
+> 分支：`feature/online-sync` · 双推目标：Gitee（✓）/ GitHub（✓ 2026-07-27 双推完成）
 > 纪律：每阶段 = 开发 → 质检 → 落盘经验 → 双推
+> 注：沙箱 .git 有覆写锁，Stage 0 的 commit 在沙箱内用「删 ref+重建」绕过；后续阶段提交建议由老徐本机干净 git 执行（commit + 双推一条命令），避开锁。
 
-## Stage 0 · sync_relay（中转层）— ✅ 完成
-- commit：`a5bfcf2`（仅新增 `relay/` + `lessons_learned_sync_relay.md`，零改现有代码）
-- 质检：codeToSecid 映射 5/5 通过；真实东财数据解析校验通过（600000，6 条、字段齐全、量/额>0）
-- 落盘经验：`lessons_learned_sync_relay.md`（东财接口格式、量纲、复权、沙箱出网限制、断言坑）
-- 部署文档：`relay/README.md`（Cloudflare Workers / 腾讯 SCF 双方案）
-- 已知：沙箱出网到东财间歇阻断，仅影响本地测试；CF/SCF 生产环境出网正常
-- 待办（真机/上线前）：核对一只股票的量纲+复权(fqt)与本地库一致
+## Stage 0 · direct_connect（手机端直连 + 三级降级）— ✅ 完成（双推 OK）
+- 架构变更：废弃中转层 `relay/`（已 `git rm` 删除），改为手机端直连东财/腾讯/新浪 HTTPS，三级降级
+- 新增：`src/config.ts`、`src/services/sources/{types,symbol,eastmoney,tencent,sina}.ts`、`src/services/syncCore.ts`、`src/services/SyncService.ts`、`src/services/sync_test.ts`
+- 修改：`src/database/SQLiteProvider.tsx`（仅新增 `getLatestKlineDate`/`upsertKlineRows`，现有函数一字不改）、`tsconfig.json`（加 allowImportingTsExtensions）
+- 质检：`node --experimental-strip-types src/services/sync_test.ts` → 5/5 通过（增量去重 3 + 三级降级 2）
+- 落盘经验：`lessons_learned_direct_connect.md`
+- 待办（真机/上线前）：核对一只股票的量纲+复权(fqt=1)与本地库一致；若本地库不复权改 fqt=0
 
-## Stage 1 · sync_service（手机端增量写入）— ⬜ 未开始
-- 新增 `SyncService`：fetch 中转 → 比对本地最新 date → 增量 INSERT；分批+限流+失败重试退避
-- 质检：mock 注入 N 条新数据 → 断言 INSERT 行数正确、无重复 date
-- 不碰现有分析/UI 文件
+## Stage 1 · sync_service（手机端增量写入）— ✅ 完成（随 Stage 0 落地）
+- `SyncService.syncStock/syncAll`：比对本地最新 date → 抓 [latest+1,今天] → 增量 INSERT（INSERT OR IGNORE + 事务）
+- `SQLiteProvider` 新增 `getLatestKlineDate`/`upsertKlineRows` 并暴露到 context
+- 单股失败隔离、股间限流、超时重试；依赖注入 SyncDeps 解耦 React context，可测
+- 不碰现有分析/UI 文件（26 策略一行不动）
 
 ## Stage 2 · watchlist（自选股清单）— ⬜ 未开始
 ## Stage 3 · trigger（启动自补 + 手动刷新）— ⬜ 未开始

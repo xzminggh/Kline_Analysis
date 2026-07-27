@@ -10,51 +10,52 @@
 ## Decisions Locked (区块一至三结论)
 | 项 | 选择 |
 |---|---|
-| 数据源架构 | A · 轻量中转 API（手机端只跟它通信） |
+| 数据源架构 | 手机端直连（无中转）+ 三级降级：东财(主)→腾讯(备)→新浪(兜底） |
 | 补全范围 | A · 自选股清单（App 内可增删，预置持仓+关注板块） |
 | 触发方式 | ① · 启动自动补全 + 手动"刷新K线"按钮 |
 | 存储 | 继续本地 expo-sqlite + 保留"从存储导入db"（向后兼容） |
 
 ## Architecture (文字图)
 ```
-[第三方行情: 东方财富历史K线接口]
-        ↑ (中转去抓 + 日级缓存 + 统一格式)
-[轻量中转 API: Cloudflare Workers / 腾讯云函数 SCF]
-        ↑ (HTTPS JSON, 单只/单批查询)
+[第三方行情: 东方财富 / 腾讯财经 / 新浪财经 (HTTPS 直连)]
+        ↑ (手机端 fetch，三级降级：东财失败→腾讯→新浪)
+[手机端 sources/ 适配器]  (code→secid/symbol，归一化 kline_daily 字段)
+        ↑
 [手机端 SyncService]
    ├─ 启动静默自补 / 手动刷新按钮
    ├─ 比对本地 kline_daily 最新 date
    └─ 增量 INSERT → 现有 SQLite
 [现有 26 策略分析]  ← 一行不動
 ```
-> 中转部署默认 Cloudflare Workers（零运维、免费）；国内访问若不稳，改腾讯云函数 SCF（国内节点、低延迟），代码同源切换成本极低。
+> 已废弃中转层 `relay/`（Cloudflare Workers / 腾讯 SCF）。改为手机端 `src/services/sources/` 直接 fetch 三大厂商 HTTPS 接口，零后端部署、最轻量，契合"手端好用、相对轻量"目标。
 
-## 接口契约（中转 ↔ 手机端）
-- 请求：`GET /kline?code=600000.SH&start=20240101&end=20261231`
-- 响应（统一成 kline_daily 字段，直接 INSERT）：
+## 数据源接口（手机端直连，三级降级）
+统一输出（对齐 `kline_daily`，可直接 INSERT）：
 ```json
-{ "code":"600000.SH", "data":[
-  {"date":"2026-07-24","open":1,"high":2,"low":3,"close":4,"volume":5,"amount":6}
+{ "code":"600000", "data":[
+  {"date":"2026-07-24","open":9.08,"high":9.12,"low":9.02,"close":9.04,"volume":506751,"amount":459278079}
 ]}
 ```
-- 失败：HTTP 4xx/5xx 或 `{"error":"..."}` → 手机端进入重试退避。
+- 一级·东财：`https://push2his.eastmoney.com/api/qt/stock/kline/get?secid=1.600000&fields1=f1&fields2=f51,f52,f53,f54,f55,f56,f57,f58&klt=101&fqt=1&beg=&end=`（含 amount）
+- 二级·腾讯：`https://web.ifzq.gtimg.cn/appstuff/app/kfqkline/?param=sh600000,day,,,320,qfq`（无 amount，估算）
+- 三级·新浪：`https://money.finance.sina.com.cn/quotes_service/api/json_v2.php/CN_MarketData.getKLineData?symbol=sh600000&scale=240&ma=no&datalen=320`（无 amount，估算；默认不复权）
+- 任一源失败 → 自动降级下一源；全失败 → 提示不崩。
 
 ## Stages（门控，每阶段过 gate 由老徐确认 — 对齐 D3 in_the_loop）
 
-### Stage 0 — `sync_relay`（中转层） · plan_execute_verify
-- **Done when：** 中转实现，按 code+起止返回统一 JSON；加日级缓存；对东财接口失败有兜底。
-- **Check：** `curl` 固定股票 → 返回字段与 kline_daily 一致、非空。
-- **Falsifiable when：** 返回缺字段 / 数据结构不符 → 手机端无法 INSERT。
-- **Passing-but-wrong ruled out：** 只断言 HTTP 200 不校验字段 → ruled out：校验返回字段与 kline_daily 完全对齐。
+### Stage 0 — `direct_connect`（手机端直连 + 三级降级） · ✅ 已完成
+- **Done when：** 实现 `src/services/sources/` 三个适配器（eastmoney/tencent/sina），统一 `KlineSource` 接口；`SyncService` 三级降级编排（主源失败自动下一个）+ 超时重试 + 增量写入；删除中转层 `relay/`。
+- **Check：** `node --experimental-strip-types src/services/sync_test.ts` → 增量去重 + 三级降级断言全过。
+- **Falsifiable when：** 某源字段解析错位 / 降级未触发 → 脏数据或补全中断 → ruled out：纯函数单测覆盖 diffKlineRows 与 fetchKlineWithFallback。
 - **Depends on：** — (entry stage)
 - **Stop：** max 3 iterations；失败 escalate。
 - **On failure：** escalate。
 
-### Stage 1 — `sync_service`（手机端增量写入） · plan_execute_verify
-- **Done when：** `SyncService` fetch 中转 → 比对本地最新 date → 增量 INSERT；分批+限流+失败重试退避；不重不漏。
-- **Check：** mock 中转注入 N 条新数据 → 断言本地 INSERT 行数正确、无重复 date。
-- **Falsifiable when：** 重复 date 或漏插 → 分析基于脏数据，但 build 仍绿 → ruled out：断言行数 + 唯一 date 约束校验。
-- **Depends on：** `sync_relay`
+### Stage 1 — `sync_service`（手机端增量写入） · ✅ 已完成（随 Stage 0 落地）
+- **Done when：** `SyncService.syncStock/syncAll` 比对本地最新 date → 抓 [latest+1,今天] → 增量 INSERT（INSERT OR IGNORE + 事务）；`SQLiteProvider` 新增 `getLatestKlineDate`/`upsertKlineRows`；分批+限流+失败重试退避；不重不漏。
+- **Check：** sync_test.ts 断言增量行数正确、无重复 date。
+- **Falsifiable when：** 重复 date 或漏插 → 分析基于脏数据 → ruled out：diffKlineRows + INSERT OR IGNORE 双保险。
+- **Depends on：** `direct_connect`
 - **Stop：** max 4 iterations。
 - **On failure：** escalate。
 
@@ -92,7 +93,7 @@
 
 ## 硬约束（沿用项目铁律）
 - 最小改动，不删不改现有分析/UI 文件；新增代码独立成模块。
-- 不引入重依赖（中转外、手机端零新包，原生 fetch 足够）。
+- 不引入重依赖（手机端零新包，原生 fetch + URLSearchParams 足够，无中转层）。
 - 任何文件改动前先说明并获老徐确认。
 - 外部副作用（网络/覆盖）有 gate 兜底。
 - 全程无必要不修改，确保不改崩。

@@ -1,6 +1,0 @@
-name = "kline-sync-relay"
-main = "worker.mjs"
-compatibility_date = "2024-09-23"
-
-# 免费额度足够：每天 10 万次请求、日级边缘缓存后实际打东财的次数极低
-# 如需自定义域名（国内访问更稳），在 Cloudflare 面板绑定即可，App 端只改一个 URL
