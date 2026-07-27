@@ -15,6 +15,8 @@ interface KlineChartProps {
   colorUp?: string;
   colorDown?: string;
   defaultVisibleCount?: number;
+  stockCode?: string;
+  stockName?: string;
 }
 
 const { width: SCREEN_WIDTH } = Dimensions.get('window');
@@ -33,9 +35,11 @@ export default function KlineChart({
   showMA20 = true,
   showBOLL = false,
   showVolume = true,
-  colorUp = '#10b981',
-  colorDown = '#ef4444',
+  colorUp = '#ef4444',
+  colorDown = '#10b981',
   defaultVisibleCount = 60,
+  stockCode,
+  stockName,
 }: KlineChartProps) {
   const chartWidth = SCREEN_WIDTH - 40;
   const priceChartHeight = height - VOLUME_HEIGHT - TIME_LABEL_HEIGHT - PADDING.top - PADDING.bottom - 10;
@@ -391,9 +395,10 @@ export default function KlineChart({
   const renderDataPanel = () => {
     if (touchIndex === null || visibleData.length === 0) return null;
     const d = visibleData[touchIndex];
-    const change = d.close - d.open;
-    const changePct = d.open > 0 ? (change / d.open * 100).toFixed(2) : '0.00';
-    const isUp = d.close >= d.open;
+    const prevClose = data[touchIndex + startIndex - 1]?.close || d.open;
+    const change = d.close - prevClose;
+    const changePct = prevClose > 0 ? (change / prevClose * 100).toFixed(2) : '0.00';
+    const isUp = change >= 0;
 
     return (
       <View style={styles.dataPanel}>
@@ -440,6 +445,10 @@ export default function KlineChart({
   return (
     <View style={styles.container}>
       <View style={styles.rangeInfo}>
+        <View style={styles.stockInfo}>
+          {stockCode && <Text style={styles.stockCode}>{stockCode}</Text>}
+          {stockName && <Text style={styles.stockName}>{stockName}</Text>}
+        </View>
         <Text style={styles.rangeInfoText}>
           显示 {startIndex + 1}-{actualEnd} / 共 {totalCount} 条
         </Text>
@@ -504,12 +513,25 @@ const styles = StyleSheet.create({
     overflow: 'hidden',
   },
   rangeInfo: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    alignItems: 'center',
+    flexDirection: 'column',
     paddingHorizontal: 12,
     paddingVertical: 6,
     backgroundColor: '#0f3460',
+  },
+  stockInfo: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    marginBottom: 4,
+    gap: 8,
+  },
+  stockCode: {
+    color: '#ffffff',
+    fontSize: 14,
+    fontWeight: 'bold',
+  },
+  stockName: {
+    color: '#00d4ff',
+    fontSize: 12,
   },
   rangeInfoText: {
     color: '#00d4ff',

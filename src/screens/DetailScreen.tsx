@@ -50,7 +50,7 @@ export default function DetailScreen() {
     showMA20: true,
     showBOLL: false,
   });
-  // 用户输入历史（内存缓存，不持久化）
+  const [showNeutralStrategies, setShowNeutralStrategies] = useState(false);
   const [inputHistory, setInputHistory] = useState<string[]>([]);
 
   useEffect(() => {
@@ -277,21 +277,29 @@ export default function DetailScreen() {
               </View>
 
               <View style={styles.strategyResults}>
-                <Text style={styles.subTitle}>未触发策略 ({analysis.strategies.filter(s => s.signal === 'NEUTRAL').length}):</Text>
-                <View style={styles.strategyList}>
-                  {analysis.strategies
-                    .filter(s => s.signal === 'NEUTRAL')
-                    .map(s => (
-                      <View key={s.id} style={styles.strategyDetailRowNeutral}>
-                        <View style={styles.strategyHeader}>
-                          <Text style={styles.strategyId}>{s.id}</Text>
-                          <Text style={styles.strategyName}>{s.name}</Text>
-                          <Text style={styles.strategyScoreNeutral}>0</Text>
+                <TouchableOpacity 
+                  style={styles.strategyHeaderRow} 
+                  onPress={() => setShowNeutralStrategies(!showNeutralStrategies)}
+                >
+                  <Text style={styles.subTitle}>未触发策略 ({analysis.strategies.filter(s => s.signal === 'NEUTRAL').length}):</Text>
+                  <Text style={styles.collapseIcon}>{showNeutralStrategies ? '▲' : '▼'}</Text>
+                </TouchableOpacity>
+                {showNeutralStrategies && (
+                  <View style={styles.strategyList}>
+                    {analysis.strategies
+                      .filter(s => s.signal === 'NEUTRAL')
+                      .map(s => (
+                        <View key={s.id} style={styles.strategyDetailRowNeutral}>
+                          <View style={styles.strategyHeader}>
+                            <Text style={styles.strategyId}>{s.id}</Text>
+                            <Text style={styles.strategyName}>{s.name}</Text>
+                            <Text style={styles.strategyScoreNeutral}>0</Text>
+                          </View>
+                          <Text style={styles.strategyDetails}>{s.details}</Text>
                         </View>
-                        <Text style={styles.strategyDetails}>{s.details}</Text>
-                      </View>
-                    ))}
-                </View>
+                      ))}
+                  </View>
+                )}
               </View>
             </>
           ) : null}
@@ -336,6 +344,8 @@ export default function DetailScreen() {
               showMA20={chartSettings.showMA20}
               showBOLL={chartSettings.showBOLL}
               defaultVisibleCount={60}
+              stockCode={code}
+              stockName={currentStockName}
             />
           </ErrorBoundary>
         </View>
@@ -706,5 +716,15 @@ const styles = StyleSheet.create({
     color: '#6b7280',
     fontSize: 12,
     fontWeight: 'bold',
+  },
+  strategyHeaderRow: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    marginBottom: 8,
+  },
+  collapseIcon: {
+    color: '#00d4ff',
+    fontSize: 12,
   },
 });
