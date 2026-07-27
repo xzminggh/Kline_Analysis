@@ -36,16 +36,13 @@ function SignalBadge({ signal }: { signal: 'BUY' | 'SELL' | 'NEUTRAL' }) {
 
 export default function OverviewScreen() {
   const navigation = useNavigation();
-  const { isConnected, getTables, getStockCount, getKlineCount, getMeta, getStocks, getKlineByCode, importDatabase } = useDatabase();
+  const { isConnected, getTables, getStockCount, getKlineCount, getStocks, getKlineByCode, importDatabase } = useDatabase();
   const [tables, setTables] = useState<string[]>([]);
   const [stockCount, setStockCount] = useState(0);
   const [klineCount, setKlineCount] = useState(0);
-  const [meta, setMeta] = useState<Record<string, string>>({});
-  const [showMeta, setShowMeta] = useState(false);
   const [loading, setLoading] = useState(true);
   const [isRunning, setIsRunning] = useState(false);
   const [progress, setProgress] = useState({ current: 0, total: 0 });
-  const [showPerfReport, setShowPerfReport] = useState(false);
   const [summary, setSummary] = useState(getAnalysisSummary());
   const [topStocks, setTopStocks] = useState(getAllAnalysis());
   const [filters, setFilters] = useState<FilterState>({
@@ -66,16 +63,14 @@ export default function OverviewScreen() {
     if (!isConnected) return;
     setLoading(true);
     try {
-      const [ts, sc, kc, mt] = await Promise.all([
+      const [ts, sc, kc] = await Promise.all([
         getTables(),
         getStockCount(),
         getKlineCount(),
-        getMeta(),
       ]);
       setTables(ts);
       setStockCount(sc);
       setKlineCount(kc);
-      setMeta(mt);
     } catch (error) {
       console.error('Failed to load overview data:', error);
     } finally {
@@ -250,27 +245,6 @@ export default function OverviewScreen() {
               {isRunning ? `分析中 ${progress.current}/${progress.total}...` : '运行策略筛选'}
             </Text>
           </TouchableOpacity>
-
-          {summary?.performanceReport && (
-            <TouchableOpacity
-              style={styles.perfToggle}
-              onPress={() => setShowPerfReport(!showPerfReport)}
-            >
-              <Text style={styles.perfToggleText}>
-                {showPerfReport ? '▼ 性能报告' : '▶ 性能报告'}
-              </Text>
-            </TouchableOpacity>
-          )}
-
-          {showPerfReport && summary?.performanceReport && (
-            <View style={styles.perfReport}>
-              {summary.performanceReport.split('\n').map((line, i) => (
-                <Text key={i} style={styles.perfLine}>
-                  {line}
-                </Text>
-              ))}
-            </View>
-          )}
         </View>
       )}
 
@@ -281,7 +255,7 @@ export default function OverviewScreen() {
         />
       )}
 
-      {filteredResults.length > 0 && (
+      {topStocks.length > 0 && (
         <View style={styles.section}>
           <Text style={styles.sectionTitle}>筛选结果 ({filteredResults.length})</Text>
           <ScrollView horizontal style={styles.starTabs}>
@@ -301,48 +275,50 @@ export default function OverviewScreen() {
               </TouchableOpacity>
             ))}
           </ScrollView>
-          <ScrollView style={styles.stockList} showsVerticalScrollIndicator={true} persistentScrollbar={true} nestedScrollEnabled={true}>
-            {filteredResults.map(result => (
-              <TouchableOpacity
-                key={result.stock.code}
-                style={styles.stockItem}
-                onPress={() => navigation.navigate('详情', { stockCode: result.stock.code })}
-                activeOpacity={0.7}
-              >
-                <View style={styles.stockTop}>
-                  <View style={styles.stockLeft}>
-                    <Text style={styles.stockCode}>{result.stock.code}</Text>
-                    <Text style={styles.stockName}>{result.stock.name}</Text>
-                  </View>
-                  <View style={styles.stockRight}>
-                    <StarRating rating={result.analysis.starRating} />
-                    <Text style={styles.stockScore}>{result.analysis.overallScore}分</Text>
-                  </View>
-                </View>
-                <View style={styles.stockBottom}>
-                  {result.latestKline && (
-                    <View style={styles.stockPrice}>
-                      <Text style={styles.priceValue}>{result.latestKline.close.toFixed(2)}</Text>
-                      <Text style={result.latestKline.close >= result.latestKline.open ? styles.priceUp : styles.priceDown}>
-                        {result.latestKline.close >= result.latestKline.open ? '+' : ''}
-                        {((result.latestKline.close - result.latestKline.open) / result.latestKline.open * 100).toFixed(2)}%
-                      </Text>
+          {filteredResults.length > 0 && (
+            <ScrollView style={styles.stockList} showsVerticalScrollIndicator={true} persistentScrollbar={true} nestedScrollEnabled={true}>
+              {filteredResults.map(result => (
+                <TouchableOpacity
+                  key={result.stock.code}
+                  style={styles.stockItem}
+                  onPress={() => navigation.navigate('详情', { stockCode: result.stock.code })}
+                  activeOpacity={0.7}
+                >
+                  <View style={styles.stockTop}>
+                    <View style={styles.stockLeft}>
+                      <Text style={styles.stockCode}>{result.stock.code}</Text>
+                      <Text style={styles.stockName}>{result.stock.name}</Text>
                     </View>
-                  )}
-                  <View style={styles.stockSignals}>
-                    <SignalBadge signal="BUY" />
-                    <Text style={styles.signalCount}>{result.analysis.buySignals}</Text>
-                    {result.analysis.sellSignals > 0 && (
-                      <>
-                        <SignalBadge signal="SELL" />
-                        <Text style={styles.signalCount}>{result.analysis.sellSignals}</Text>
-                      </>
-                    )}
+                    <View style={styles.stockRight}>
+                      <StarRating rating={result.analysis.starRating} />
+                      <Text style={styles.stockScore}>{result.analysis.overallScore}分</Text>
+                    </View>
                   </View>
-                </View>
-              </TouchableOpacity>
-            ))}
-          </ScrollView>
+                  <View style={styles.stockBottom}>
+                    {result.latestKline && (
+                      <View style={styles.stockPrice}>
+                        <Text style={styles.priceValue}>{result.latestKline.close.toFixed(2)}</Text>
+                        <Text style={result.latestKline.close >= result.latestKline.open ? styles.priceUp : styles.priceDown}>
+                          {result.latestKline.close >= result.latestKline.open ? '+' : ''}
+                          {((result.latestKline.close - result.latestKline.open) / result.latestKline.open * 100).toFixed(2)}%
+                        </Text>
+                      </View>
+                    )}
+                    <View style={styles.stockSignals}>
+                      <SignalBadge signal="BUY" />
+                      <Text style={styles.signalCount}>{result.analysis.buySignals}</Text>
+                      {result.analysis.sellSignals > 0 && (
+                        <>
+                          <SignalBadge signal="SELL" />
+                          <Text style={styles.signalCount}>{result.analysis.sellSignals}</Text>
+                        </>
+                      )}
+                    </View>
+                  </View>
+                </TouchableOpacity>
+              ))}
+            </ScrollView>
+          )}
         </View>
       )}
 
@@ -367,29 +343,6 @@ export default function OverviewScreen() {
               </Text>
             </TouchableOpacity>
           </View>
-        </View>
-      )}
-
-      {Object.keys(meta).length > 0 && (
-        <View style={styles.section}>
-          <TouchableOpacity
-            style={styles.sectionHeader}
-            onPress={() => setShowMeta(!showMeta)}
-            activeOpacity={0.7}
-          >
-            <Text style={styles.sectionTitle}>元数据 ({Object.keys(meta).length})</Text>
-            <Text style={styles.toggleIcon}>{showMeta ? '▼' : '▶'}</Text>
-          </TouchableOpacity>
-          {showMeta && (
-            <View>
-              {Object.entries(meta).map(([key, value]) => (
-                <View key={key} style={styles.infoRow}>
-                  <Text style={styles.infoLabel}>{key}:</Text>
-                  <Text style={styles.infoValue}>{value}</Text>
-                </View>
-              ))}
-            </View>
-          )}
         </View>
       )}
     </ScrollView>

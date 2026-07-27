@@ -46,10 +46,6 @@ export default function KlineChart({
   const [touchIndex, setTouchIndex] = useState<number | null>(null);
 
   // 手势辅助状态
-  const pinchStartDistance = useRef(0);
-  const pinchStartVisibleCount = useRef(0);
-  const panStartOffsetX = useRef(0);
-  const panStartEndIndex = useRef(0);
   const lastTapTime = useRef(0);
   const lastTapX = useRef(0);
   const movedDuringTouch = useRef(false);
@@ -137,21 +133,27 @@ export default function KlineChart({
     return PADDING.left + index * (candleWidth + gap) + candleWidth / 2;
   }, [candleWidth, gap]);
 
+  // 手势辅助：跨多帧追踪触摸状态
+  const pinchState = useRef({
+    startDistance: 0,
+    startVisibleCount: 0,
+    active: false,
+  });
+  const panState = useRef({
+    startEndIndex: 0,
+    active: false,
+  });
+
   // PanResponder: 双指缩放 + 单指拖动 + 双击重置
   const panResponder = useRef(
     PanResponder.create({
       onStartShouldSetPanResponder: () => true,
-      onStartShouldSetPanResponderCapture: (evt) => {
-        // 双指时立即在捕获阶段拦截
-        return evt.nativeEvent.touches.length === 2;
-      },
+      onStartShouldSetPanResponderCapture: () => true,
       onMoveShouldSetPanResponder: (evt, gestureState) => {
-        // 双指时立即响应，单指时需移动阈值
         if (evt.nativeEvent.touches.length === 2) return true;
         return Math.abs(gestureState.dx) > 3 || Math.abs(gestureState.dy) > 3;
       },
       onMoveShouldSetPanResponderCapture: (evt) => {
-        // 双指移动时在捕获阶段拦截，防止外层ScrollView抢占
         return evt.nativeEvent.touches.length === 2;
       },
       onPanResponderTerminationRequest: () => false,
@@ -161,11 +163,16 @@ export default function KlineChart({
           const t = evt.nativeEvent.touches;
           const dx = t[0].locationX - t[1].locationX;
           const dy = t[0].locationY - t[1].locationY;
-          pinchStartDistance.current = Math.sqrt(dx * dx + dy * dy);
-          pinchStartVisibleCount.current = visibleCount;
+          const distance = Math.sqrt(dx * dx + dy * dy);
+          pinchState.current = {
+            startDistance: distance,
+            startVisibleCount: visibleCount,
+            active: true,
+          };
+          panState.current.active = false;
         } else if (evt.nativeEvent.touches.length === 1) {
-          panStartOffsetX.current = evt.nativeEvent.locationX;
-          panStartEndIndex.current = actualEnd;
+          panState.current = { startEndIndex: actualEnd, active: true };
+          pinchState.current.active = false;
         }
       },
       onPanResponderMove: (evt, gestureState) => {
@@ -174,29 +181,32 @@ export default function KlineChart({
           setTouchIndex(null);
         }
 
-        if (evt.nativeEvent.touches.length === 2 && pinchStartDistance.current > 0) {
+        if (evt.nativeEvent.touches.length === 2 && pinchState.current.active) {
           // 双指缩放
           const t = evt.nativeEvent.touches;
           const dx = t[0].locationX - t[1].locationX;
           const dy = t[0].locationY - t[1].locationY;
           const distance = Math.sqrt(dx * dx + dy * dy);
-          if (distance > 10) {
-            const ratio = pinchStartDistance.current / distance;
-            const newVisible = Math.round(pinchStartVisibleCount.current * ratio);
+          if (distance > 10 && pinchState.current.startDistance > 0) {
+            // 核心：手指分开→distance变大→ratio变小→可见K线变多（缩小）
+            // 手指合拢→distance变小→ratio变大→可见K线变少（放大）
+            const ratio = pinchState.current.startDistance / distance;
+            const newVisible = Math.round(pinchState.current.startVisibleCount * ratio);
             setVisibleCount(Math.max(MIN_VISIBLE, Math.min(MAX_VISIBLE, newVisible)));
           }
-        } else if (evt.nativeEvent.touches.length === 1 && gestureState.dx !== 0) {
+        } else if (evt.nativeEvent.touches.length === 1 && panState.current.active && gestureState.dx !== 0) {
           // 单指拖动 - 平移可见范围
           const candlePlusGap = candleWidth + gap;
           if (candlePlusGap > 0) {
             const movedCandles = Math.round(gestureState.dx / candlePlusGap);
-            const newEnd = panStartEndIndex.current - movedCandles;
+            const newEnd = panState.current.startEndIndex - movedCandles;
             setEndIndex(Math.max(actualVisible, Math.min(totalCount, newEnd)));
           }
         }
       },
       onPanResponderRelease: (evt) => {
-        pinchStartDistance.current = 0;
+        pinchState.current.active = false;
+        panState.current.active = false;
         // 双击检测
         if (!movedDuringTouch.current && evt.nativeEvent.touches.length === 0) {
           const now = Date.now();
@@ -217,6 +227,10 @@ export default function KlineChart({
           lastTapTime.current = now;
           lastTapX.current = tapX;
         }
+      },
+      onPanResponderTerminate: () => {
+        pinchState.current.active = false;
+        panState.current.active = false;
       },
     })
   ).current;

@@ -1,7 +1,9 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useCallback } from 'react';
 import { View, Text, StyleSheet, ScrollView, TouchableOpacity, ActivityIndicator } from 'react-native';
+import { useFocusEffect } from '@react-navigation/native';
 import { useDatabase } from '../database/SQLiteProvider';
-import { runAnalysis, getAllAnalysis, getAnalysisSummary, AnalysisResult, generateCSV, STRATEGIES, CATEGORIES, toggleStrategy as toggleStrategyService, getStrategyState } from '../services/AnalysisService';
+import { runAnalysis, getAllAnalysis, getAnalysisSummary, AnalysisResult, generateCSV, STRATEGIES, CATEGORIES, toggleStrategy as toggleStrategyService, getStrategyState, getEnabledStrategyIds } from '../services/AnalysisService';
+import { generateAnalysisReport } from '../utils/reportGenerator';
 import * as FileSystem from 'expo-file-system/legacy';
 import * as Sharing from 'expo-sharing';
 
@@ -41,13 +43,13 @@ export default function StrategyScreen() {
   const [showResults, setShowResults] = useState(false);
   const [progress, setProgress] = useState({ current: 0, total: 0 });
 
-  useEffect(() => {
-    const cached = getAllAnalysis();
-    if (cached.length > 0) {
+  useFocusEffect(
+    useCallback(() => {
+      const cached = getAllAnalysis();
       setAnalysisResults(cached);
-      setShowResults(true);
-    }
-  }, []);
+      setShowResults(cached.length > 0);
+    }, [])
+  );
 
   const toggleStrategy = (id: string) => {
     const newState = toggleStrategyService(id);
@@ -100,6 +102,17 @@ export default function StrategyScreen() {
     await Sharing.shareAsync(filePath);
   };
 
+  const handleGenerateReport = async () => {
+    const report = generateAnalysisReport(analysisResults, {
+      dbName: '本地数据库',
+      strategyCount: strategies.length,
+      enabledStrategyIds: getEnabledStrategyIds(),
+    });
+    const filePath = `${FileSystem.documentDirectory}analysis_report.md`;
+    await FileSystem.writeAsStringAsync(filePath, report);
+    await Sharing.shareAsync(filePath);
+  };
+
   const enabledCount = strategies.filter(s => s.enabled).length;
   const summary = getAnalysisSummary();
 
@@ -138,16 +151,21 @@ export default function StrategyScreen() {
         </TouchableOpacity>
       </View>
 
-      {showResults && summary && (
+      {showResults && analysisResults.length > 0 && (
         <View style={styles.section}>
           <View style={styles.resultHeader}>
             <Text style={styles.sectionTitle}>筛选结果 Top20</Text>
-            <TouchableOpacity style={styles.exportButton} onPress={handleExportCSV}>
-              <Text style={styles.exportButtonText}>导出CSV</Text>
-            </TouchableOpacity>
+            <View style={styles.buttonRow}>
+              <TouchableOpacity style={styles.reportButton} onPress={handleGenerateReport}>
+                <Text style={styles.reportButtonText}>生成报告</Text>
+              </TouchableOpacity>
+              <TouchableOpacity style={styles.exportButton} onPress={handleExportCSV}>
+                <Text style={styles.exportButtonText}>导出CSV</Text>
+              </TouchableOpacity>
+            </View>
           </View>
           <Text style={styles.hintText}>
-            共 {summary.analyzedStocks} 只 · 买入 {summary.buySignals} · 卖出 {summary.sellSignals} · 5星 {summary.star5Count}
+            共 {summary?.analyzedStocks || analysisResults.length} 只 · 买入 {summary?.buySignals || 0} · 卖出 {summary?.sellSignals || 0} · 5星 {summary?.star5Count || 0}
           </Text>
           <ScrollView style={styles.resultList} showsVerticalScrollIndicator={true} persistentScrollbar={true} nestedScrollEnabled={true}>
             {analysisResults
@@ -328,6 +346,21 @@ const styles = StyleSheet.create({
     justifyContent: 'space-between',
     alignItems: 'center',
     marginBottom: 4,
+  },
+  buttonRow: {
+    flexDirection: 'row',
+    gap: 8,
+  },
+  reportButton: {
+    backgroundColor: '#f59e0b',
+    paddingHorizontal: 14,
+    paddingVertical: 8,
+    borderRadius: 6,
+  },
+  reportButtonText: {
+    color: '#ffffff',
+    fontSize: 13,
+    fontWeight: 'bold',
   },
   hintText: {
     color: '#94a3b8',

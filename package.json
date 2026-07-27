@@ -8,6 +8,7 @@
   },
   "scripts": {
     "start": "expo start",
+    "start:8082": "expo start --port 8082",
     "android": "expo start --android",
     "ios": "expo start --ios",
     "build": "expo build:android --no-publish",
