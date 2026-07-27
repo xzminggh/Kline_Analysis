@@ -452,7 +452,7 @@ export default function KlineChart({
         <Text style={styles.rangeInfoText}>
           显示 {startIndex + 1}-{actualEnd} / 共 {totalCount} 条
         </Text>
-        <Text style={styles.rangeInfoHint}>双指缩放 · 双击重置 · 单指拖动平移</Text>
+        <Text style={styles.rangeInfoHint}>双击重置 · 单指拖动平移</Text>
       </View>
       <View
         style={[styles.chartWrapper, { height }]}

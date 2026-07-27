@@ -102,8 +102,11 @@ export default function StrategyScreen() {
     await Sharing.shareAsync(filePath);
   };
 
-  const handleGenerateReport = async () => {
-    const report = generateAnalysisReport(analysisResults, {
+  const handleGenerateReport = async (top20Only: boolean) => {
+    const results = top20Only
+      ? [...analysisResults].sort((a, b) => b.analysis.overallScore - a.analysis.overallScore).slice(0, 20)
+      : analysisResults;
+    const report = generateAnalysisReport(results, {
       dbName: '本地数据库',
       strategyCount: strategies.length,
       enabledStrategyIds: getEnabledStrategyIds(),
@@ -156,9 +159,14 @@ export default function StrategyScreen() {
           <View style={styles.resultHeader}>
             <Text style={styles.sectionTitle}>筛选结果 Top20</Text>
             <View style={styles.buttonRow}>
-              <TouchableOpacity style={styles.reportButton} onPress={handleGenerateReport}>
-                <Text style={styles.reportButtonText}>生成报告</Text>
-              </TouchableOpacity>
+              <View style={styles.reportButtonGroup}>
+                <TouchableOpacity style={styles.reportButton} onPress={() => handleGenerateReport(true)}>
+                  <Text style={styles.reportButtonText}>Top20报告</Text>
+                </TouchableOpacity>
+                <TouchableOpacity style={styles.reportButton} onPress={() => handleGenerateReport(false)}>
+                  <Text style={styles.reportButtonText}>全部报告</Text>
+                </TouchableOpacity>
+              </View>
               <TouchableOpacity style={styles.exportButton} onPress={handleExportCSV}>
                 <Text style={styles.exportButtonText}>导出CSV</Text>
               </TouchableOpacity>
@@ -171,28 +179,65 @@ export default function StrategyScreen() {
             {analysisResults
               .sort((a, b) => b.analysis.overallScore - a.analysis.overallScore)
               .slice(0, 20)
-              .map(result => (
-                <View key={result.stock.code} style={styles.resultItem}>
-                  <View style={styles.resultLeft}>
-                    <Text style={styles.resultCode}>{result.stock.code}</Text>
-                    <Text style={styles.resultName}>{result.stock.name}</Text>
-                  </View>
-                  <View style={styles.resultRight}>
-                    <StarRating rating={result.analysis.starRating} />
-                    <Text style={styles.resultScore}>{result.analysis.overallScore}分</Text>
-                  </View>
-                  <View style={styles.resultSignals}>
-                    <SignalBadge signal="BUY" />
-                    <Text style={styles.signalCount}>x{result.analysis.buySignals}</Text>
-                    {result.analysis.sellSignals > 0 && (
-                      <>
-                        <SignalBadge signal="SELL" />
-                        <Text style={styles.signalCount}>x{result.analysis.sellSignals}</Text>
-                      </>
+              .map(result => {
+                const latestKline = result.latestKline;
+                const price = latestKline ? latestKline.close.toFixed(2) : '--';
+                const change = latestKline ? (latestKline.close - latestKline.open) : 0;
+                const changePct = latestKline && latestKline.open > 0 ? ((change / latestKline.open) * 100).toFixed(2) : '0.00';
+                const isUp = change >= 0;
+                const colorUp = '#ef4444';
+                const colorDown = '#10b981';
+
+                const buyStrategies = result.analysis.strategies.filter(s => s.signal === 'BUY');
+                const sellStrategies = result.analysis.strategies.filter(s => s.signal === 'SELL');
+
+                return (
+                  <View key={result.stock.code} style={styles.resultItem}>
+                    <View style={styles.resultHeader}>
+                      <View style={styles.resultLeft}>
+                        <Text style={styles.resultCode}>{result.stock.code}</Text>
+                        <Text style={styles.resultName}>{result.stock.name}</Text>
+                      </View>
+                      <View style={styles.resultRight}>
+                        <StarRating rating={result.analysis.starRating} />
+                        <Text style={styles.resultScore}>{result.analysis.overallScore}分</Text>
+                      </View>
+                    </View>
+                    <View style={styles.resultPriceRow}>
+                      <View style={styles.resultPrice}>
+                        <Text style={[styles.priceValue, { color: isUp ? colorUp : colorDown }]}>{price}</Text>
+                        <Text style={[styles.priceChange, { color: isUp ? colorUp : colorDown }]}>
+                          {isUp ? '+' : ''}{changePct}%
+                        </Text>
+                      </View>
+                      <View style={styles.resultSignals}>
+                        <SignalBadge signal="BUY" />
+                        <Text style={styles.signalCount}>x{result.analysis.buySignals}</Text>
+                        {result.analysis.sellSignals > 0 && (
+                          <>
+                            <SignalBadge signal="SELL" />
+                            <Text style={styles.signalCount}>x{result.analysis.sellSignals}</Text>
+                          </>
+                        )}
+                      </View>
+                    </View>
+                    {(buyStrategies.length > 0 || sellStrategies.length > 0) && (
+                      <View style={styles.resultStrategyTags}>
+                        {buyStrategies.map(s => (
+                          <View key={s.id} style={[styles.strategyTag, styles.strategyTagBuy]}>
+                            <Text style={styles.strategyTagText}>▲ {s.name}</Text>
+                          </View>
+                        ))}
+                        {sellStrategies.map(s => (
+                          <View key={s.id} style={[styles.strategyTag, styles.strategyTagSell]}>
+                            <Text style={styles.strategyTagText}>▼ {s.name}</Text>
+                          </View>
+                        ))}
+                      </View>
                     )}
                   </View>
-                </View>
-              ))}
+                );
+              })}
           </ScrollView>
         </View>
       )}
@@ -351,15 +396,19 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     gap: 8,
   },
+  reportButtonGroup: {
+    flexDirection: 'row',
+    gap: 6,
+  },
   reportButton: {
     backgroundColor: '#f59e0b',
-    paddingHorizontal: 14,
+    paddingHorizontal: 10,
     paddingVertical: 8,
     borderRadius: 6,
   },
   reportButtonText: {
     color: '#ffffff',
-    fontSize: 13,
+    fontSize: 12,
     fontWeight: 'bold',
   },
   hintText: {
@@ -376,8 +425,13 @@ const styles = StyleSheet.create({
     borderRadius: 8,
     marginBottom: 8,
   },
-  resultLeft: {
+  resultHeader: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'flex-start',
     marginBottom: 8,
+  },
+  resultLeft: {
   },
   resultCode: {
     color: '#00d4ff',
@@ -389,10 +443,30 @@ const styles = StyleSheet.create({
     fontSize: 16,
   },
   resultRight: {
+    alignItems: 'center',
+    gap: 8,
+  },
+  resultPriceRow: {
     flexDirection: 'row',
     justifyContent: 'space-between',
     alignItems: 'center',
     marginBottom: 8,
+    paddingVertical: 6,
+    borderTopWidth: 1,
+    borderBottomWidth: 1,
+    borderColor: '#1a1a2e',
+  },
+  resultPrice: {
+    flexDirection: 'row',
+    alignItems: 'baseline',
+    gap: 6,
+  },
+  priceValue: {
+    fontSize: 18,
+    fontWeight: 'bold',
+  },
+  priceChange: {
+    fontSize: 12,
   },
   starContainer: {
     flexDirection: 'row',
@@ -427,6 +501,26 @@ const styles = StyleSheet.create({
   signalCount: {
     color: '#6b7280',
     fontSize: 12,
+  },
+  resultStrategyTags: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    gap: 6,
+  },
+  strategyTag: {
+    paddingHorizontal: 8,
+    paddingVertical: 3,
+    borderRadius: 4,
+  },
+  strategyTagBuy: {
+    backgroundColor: 'rgba(239, 68, 68, 0.2)',
+  },
+  strategyTagSell: {
+    backgroundColor: 'rgba(16, 185, 129, 0.2)',
+  },
+  strategyTagText: {
+    fontSize: 11,
+    color: '#ffffff',
   },
   categoryScroll: {
     flexDirection: 'row',

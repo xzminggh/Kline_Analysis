@@ -363,18 +363,23 @@ export default function DetailScreen() {
             <Text style={styles.klineHeaderNum}>成交量(万)</Text>
           </View>
           <ScrollView style={styles.klineList} showsVerticalScrollIndicator={true} persistentScrollbar={true} nestedScrollEnabled={true}>
-            {[...klineData].reverse().map((item, index) => (
-              <View key={index} style={styles.klineRow}>
-                <Text style={styles.klineDate}>{item.date}</Text>
-                <Text style={styles.klineNum}>{item.open.toFixed(2)}</Text>
-                <Text style={[styles.klineNum, { color: '#10b981' }]}>{item.high.toFixed(2)}</Text>
-                <Text style={[styles.klineNum, { color: '#ef4444' }]}>{item.low.toFixed(2)}</Text>
-                <Text style={[styles.klineNum, item.close >= item.open ? { color: '#10b981' } : { color: '#ef4444' }]}>
-                  {item.close.toFixed(2)}
-                </Text>
-                <Text style={styles.klineNum}>{(item.volume / 10000).toFixed(0)}</Text>
-              </View>
-            ))}
+            {[...klineData].reverse().map((item, index) => {
+              const isUp = item.close >= item.open;
+              const colorUp = '#ef4444';
+              const colorDown = '#10b981';
+              return (
+                <View key={index} style={styles.klineRow}>
+                  <Text style={styles.klineDate}>{item.date.replace(/-/g, '')}</Text>
+                  <Text style={styles.klineNum}>{item.open.toFixed(2)}</Text>
+                  <Text style={[styles.klineNum, { color: isUp ? colorUp : colorDown }]}>{item.high.toFixed(2)}</Text>
+                  <Text style={[styles.klineNum, { color: isUp ? colorUp : colorDown }]}>{item.low.toFixed(2)}</Text>
+                  <Text style={[styles.klineNum, { color: isUp ? colorUp : colorDown, fontWeight: 'bold' }]}>
+                    {item.close.toFixed(2)}
+                  </Text>
+                  <Text style={styles.klineNum}>{(item.volume / 10000).toFixed(0)}</Text>
+                </View>
+              );
+            })}
           </ScrollView>
         </View>
       )}
