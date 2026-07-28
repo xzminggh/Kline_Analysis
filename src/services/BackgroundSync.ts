@@ -144,12 +144,17 @@ export async function isBackgroundSyncEnabled(deps: BackgroundSyncDeps = {}): Pr
  */
 export async function isBackgroundFetchAvailable(deps: BackgroundSyncDeps = {}): Promise<boolean> {
   const bf = deps.backgroundFetch ?? BackgroundFetch;
+  // [wb修改] getStatusAsync 内部会**无条件** console.warn 一条弃用通知
+  // （"use expo-background-task instead"），此警告在 Expo Go 下纯属噪音
+  // （后台任务本就不执行）。调用期间临时静默，异常仍由 catch 正常返回 false。
+  const origWarn = console.warn;
+  console.warn = () => {};
   try {
-    // [wb修改] Expo Go 调此方法会抛 "not available" 并 console.warn，
-    // 我们用 try/catch 吞掉异常 + 下面临时压制 warn，对用户完全静默
     return await bf.getStatusAsync().then(() => true);
   } catch {
     return false;
+  } finally {
+    console.warn = origWarn;
   }
 }
 
