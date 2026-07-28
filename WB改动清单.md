@@ -14,7 +14,7 @@
 | S1 scaffold | 2026-07-28 | 建 KlineFetcher/SyncService/verify_sync 骨架，tsc 零新增错误 | Gitee ✅ / GitHub ✅(API直推) |
 | S2 fetcher | 2026-07-28 | 三源降级抓取实现+17单测全绿（腾讯→新浪→东财，实测校准） | Gitee ✅ / GitHub ✅(API直推) |
 | S3 diff_patch | 2026-07-28 | 比对+仅INSERT补齐实现+15单测（含无UPDATE/DELETE硬断言） | Gitee ✅ / GitHub ✅(API直推) |
-| S4 ui | 2026-07-28 | 一键补齐面板(自包含)+进度+摘要；补齐仓库缺失的 .eslintrc.js | 待推 |
+| S4 ui | 2026-07-28 | 一键补齐面板(自包含)+进度+摘要；补齐仓库缺失的 .eslintrc.js | Gitee ✅ / GitHub ✅(API直推) |
 | S5 background | 待办 | 后台定时+仅WiFi守卫 | 待办 |
 | S6 integration | 待办 | 全量测试+数据完整性断言 | 待办 |
 
@@ -57,4 +57,4 @@
 - **[wb修改]** 新增 `.eslintrc.js`：补齐仓库历史缺口（package.json 早声明 lint 脚本+依赖却无配置文件，导致 `eslint .` 无法运行）。适配已装 eslint@8.57 + @typescript-eslint@6，规则取向：类型正确性交 tsc；噪声规则降级 warn；历史代码 14 个 warning 不阻断；`prefer-const` 因 1 处历史 error 降级为 warn（不动源码，守铁律#2/#3）
 - **[wb修改]** 新增 `经验落盘/lessons_learned_stage4_ui.md`：eslint 配置策略 + 组件自包含设计 + 历史代码 warning 清单
 - 质检：tsc 27→27 ✅（WB 零错误）；`eslint .` exit 0、0 errors，WB 四个文件零 warning/error；全量 jest 5 套件 52/52 ✅（无回归）
-- 双推：本地已就绪，待提交后 Gitee + GitHub 两端推送（见下方提交记录）
+- 双推：`Gitee ✅`（commit `60249f5`）/ `GitHub ✅`（API 直推 commit `83f6c60`，远程 head 原 `32e267e`）
