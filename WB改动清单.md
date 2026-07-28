@@ -10,7 +10,7 @@
 ## 阶段总览
 | 阶段 | 日期 | 主要改变 | 双推状态 |
 |------|------|----------|----------|
-| S0 设计与清单 | 2026-07-28 | loop-constructor 工程设计并过 linter + 建立 WB 改动清单与经验落盘机制 | Gitee ✅ / GitHub ✅ |
+| S0 设计与清单 | 2026-07-28 | loop-constructor 工程设计并过 linter + 建立 WB 改动清单与经验落盘机制 | Gitee ✅ / GitHub ⏳需本机推 |
 | S1 scaffold | 待办 | 建 KlineFetcher / SyncService 模块骨架 | 待办 |
 | S2 fetcher | 待办 | 三源降级抓取实现 | 待办 |
 | S3 diff_patch | 待办 | 比对+仅INSERT补齐 | 待办 |
@@ -25,4 +25,4 @@
 - **[wb修改]** 新增 `kline-sync.design.json`：loop-constructor 原始分阶段设计（D0–D6 决策日志）
 - **[wb修改]** 新增 `WB改动清单.md`：本双推追踪文件
 - **[wb修改]** 新增 `经验落盘/lessons_learned_stage0_loop_design.md`：阶段经验
-- 双推：`Gitee ✅` / `GitHub ✅`
+- 双推：`Gitee ✅`（commit `9a7f4d7`，已 rebase 到远程 `f174c35` 之上）/ `GitHub ⏳` 沙箱推不了（git 443 被墙 + connector 只读授权 403），需老徐本机执行：`git pull gitee_或origin master && git push github master`（两端历史同源，可直接快进）
