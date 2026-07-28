@@ -26,7 +26,7 @@
   5. 单股实时补齐 UI (详情页入口)
 - **核心铁律**: 向后兼容 / 模块边界 / UI 不碰数据层 / 质检前置 / 双推纪律 / 经验落盘
 - **Linter 校验**: 全部通过 (version / altitude / selection_log / stages / human / outer / acyclic)
-- **双推状态**: Gitee 待推送 / GitHub 待推送
+- **双推状态**: Gitee ✅ / GitHub ✅
 
 ---
 
