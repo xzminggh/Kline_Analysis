@@ -17,7 +17,7 @@
 | S4 ui | 2026-07-28 | 一键补齐面板(自包含)+进度+摘要；补齐仓库缺失的 .eslintrc.js | Gitee ✅ / GitHub ✅(API直推) |
 | S5 background | 2026-07-28 | 后台定时补齐+仅WiFi守卫+首次手动授权；SyncPanel增后台开关；+expo-network依赖 | Gitee ✅ / GitHub ✅(API直推) |
 | S6 integration | 2026-07-28 | verify_sync三断言落地(node:sqlite)、全量质检通过、maker_checker铁律复核 | Gitee ✅ / GitHub ✅(API直推) |
-| S7 tsc-cleanup | 2026-07-28 | 历史tsc错误27→0（用户授权）；修复K01策略MA20真bug+emptyText不可见UX bug | 待推 |
+| S7 tsc-cleanup | 2026-07-28 | 历史tsc错误27→0（用户授权）；修复K01策略MA20真bug+emptyText不可见UX bug | Gitee ✅ / GitHub ✅(API直推) |
 
 ## 详细记录
 
@@ -87,4 +87,4 @@
 - **[wb修改]** 新增 `src/types/navigation.d.ts`：react-navigation 全局路由参数表（纯类型声明）
 - **[wb修改]** 新增 `经验落盘/lessons_learned_stage7_tsc_cleanup.md`
 - 质检：**tsc 27→0 首次全绿 exit 0** ✅；jest 65/65 无回归 ✅；eslint 0错/14历史warning不变 ✅；verify_sync exit 0 ✅
-- 双推：本地已就绪，待提交后 Gitee + GitHub 两端推送
+- 双推：`Gitee ✅`（commit `8238962`）/ `GitHub ✅`（API 直推 commit `6cb6368`）
