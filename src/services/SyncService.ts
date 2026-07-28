@@ -17,7 +17,7 @@
 
 import type { SQLiteDatabase } from 'expo-sqlite';
 import type { KlineDaily } from '../database/SQLiteProvider';
-import { fetchDailyKline, AllSourcesFailedError, DEFAULT_FETCH_DAYS, type FetchLike } from './KlineFetcher';
+import { fetchDailyKline, AllSourcesFailedError, DEFAULT_FETCH_DAYS, type FetchLike, type AdjustMode } from './KlineFetcher';
 
 /** 单只股票的同步游标（本地最后一根K线日期） */
 export interface SyncCursor {
@@ -219,39 +219,50 @@ export async function runFullSync(
     const batchResults = await Promise.all(
       batch.map(async (cursor): Promise<StockSyncResult> => {
         try {
-          const { bars: onlineBarsRaw, source } = await fetchDailyKline(
-            cursor.code,
-            days,
-            options.fetchImpl ?? (fetch as unknown as FetchLike)
-          );
-          const onlineBars = dropUnclosedTodayBar(onlineBarsRaw, options.now ?? new Date());
+          // [wb修改] 自动探测复权模式：先尝试 qfq（前复权），若校验失败则用 raw（不复权）重试一次
+          // 适配用户 DB 可能是前复权或不复权两种格式，无需手动配置
+          const ADJUST_MODES: AdjustMode[] = ['qfq', 'raw'];
+          let lastRejectError: string | undefined;
 
-          // 读本地该股 bars（近段即可：只需覆盖在线窗口做重叠校验与 diff）
-          const minOnlineDate = onlineBars.length > 0 ? onlineBars[0].date : '';
-          const localBars = await db.getAllAsync<KlineDaily>(
-            `SELECT code, date, open, high, low, close, volume, amount
-             FROM kline_daily WHERE code = ? AND date >= ? ORDER BY date ASC`,
-            [cursor.code, minOnlineDate]
-          );
+          for (const mode of ADJUST_MODES) {
+            const { bars: onlineBarsRaw, source } = await fetchDailyKline(
+              cursor.code,
+              days,
+              options.fetchImpl ?? (fetch as unknown as FetchLike),
+              mode
+            );
+            const onlineBars = dropUnclosedTodayBar(onlineBarsRaw, options.now ?? new Date());
 
-          // 复权基准校验（重叠不足时放行）
-          if (!checkAdjustBasis(localBars, onlineBars)) {
-            return {
-              code: cursor.code,
-              status: 'rejected',
-              insertedBars: 0,
-              source,
-              error: '复权基准与本地不一致，拒绝写入（防价格尺度错乱）',
-            };
+            // 读本地该股 bars（近段即可：只需覆盖在线窗口做重叠校验与 diff）
+            const minOnlineDate = onlineBars.length > 0 ? onlineBars[0].date : '';
+            const localBars = await db.getAllAsync<KlineDaily>(
+              `SELECT code, date, open, high, low, close, volume, amount
+               FROM kline_daily WHERE code = ? AND date >= ? ORDER BY date ASC`,
+              [cursor.code, minOnlineDate]
+            );
+
+            // 复权基准校验（重叠不足时放行）
+            if (!checkAdjustBasis(localBars, onlineBars)) {
+              lastRejectError = '复权基准与本地不一致，拒绝写入（防价格尺度错乱）';
+              continue; // 尝试下一种复权模式
+            }
+
+            const localDates = new Set(localBars.map((b) => b.date));
+            const missing = diffMissingBars(localDates, onlineBars);
+            if (missing.length === 0) {
+              return { code: cursor.code, status: 'up_to_date', insertedBars: 0, source };
+            }
+            const inserted = await insertMissingBars(db, missing);
+            return { code: cursor.code, status: 'patched', insertedBars: inserted, source };
           }
 
-          const localDates = new Set(localBars.map((b) => b.date));
-          const missing = diffMissingBars(localDates, onlineBars);
-          if (missing.length === 0) {
-            return { code: cursor.code, status: 'up_to_date', insertedBars: 0, source };
-          }
-          const inserted = await insertMissingBars(db, missing);
-          return { code: cursor.code, status: 'patched', insertedBars: inserted, source };
+          // 两种模式都校验失败 → 拒绝该股
+          return {
+            code: cursor.code,
+            status: 'rejected',
+            insertedBars: 0,
+            error: lastRejectError ?? '复权校验失败',
+          };
         } catch (e) {
           const msg =
             e instanceof AllSourcesFailedError ? e.message : e instanceof Error ? e.message : String(e);

@@ -92,13 +92,28 @@ describe('URL 构造', () => {
     expect(buildSinaUrl('000001', 60)).toContain('datalen=60');
   });
   it('东财：sh→secid=1.x，sz→0.x，用 beg/end 而非 lmt（实测 lmt 不生效）', () => {
-    const url = buildEastmoneyUrl('600000', 120, new Date('2026-07-28'));
+    const url = buildEastmoneyUrl('600000', 120, 'qfq', new Date('2026-07-28'));
     expect(url).toContain('secid=1.600000');
     expect(url).toContain('fqt=1'); // 前复权
     expect(url).toMatch(/beg=\d{8}/); // beg/end 模式（120天×2缓冲会跨年，只断言格式）
     expect(url).toContain('end=20500101');
     expect(url).not.toContain('lmt=');
     expect(buildEastmoneyUrl('000001', 120)).toContain('secid=0.000001');
+  });
+
+  it('腾讯 raw 模式：URL 末位无 qfq 参数', () => {
+    const url = buildTencentUrl('600000', 30, 'raw');
+    expect(url).not.toContain(',qfq');
+    expect(url).not.toMatch(/,qfq$/);
+    // 默认 qfq 模式应有 qfq
+    expect(buildTencentUrl('600000', 30)).toContain(',qfq');
+  });
+
+  it('东财 raw 模式：fqt=0', () => {
+    const url = buildEastmoneyUrl('600000', 120, 'raw');
+    expect(url).toContain('fqt=0');
+    // 默认 qfq 模式 fqt=1
+    expect(buildEastmoneyUrl('600000', 120, 'qfq')).toContain('fqt=1');
   });
 });
 

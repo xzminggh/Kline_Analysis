@@ -97,13 +97,17 @@ class FakeDb {
   }
 }
 
-/** mock 三源：腾讯直接命中，返回给定 bars（腾讯响应格式） */
+/**
+ * mock 三源：腾讯直接命中，返回给定 bars（腾讯响应格式）。
+ * 同时返回 qfqday 和 day 字段，适配 qfq/raw 两种模式解析。
+ */
 function tencentFetchFor(barsByCode: Record<string, KlineDaily[]>): FetchLike {
   return async (url: string) => {
     const m = url.match(/param=(sh|sz|bj)(\d{6})/);
     if (!m || !url.includes('gtimg')) return { ok: false, status: 500, json: async () => ({}) };
     const code = m[2];
     const bars = barsByCode[code] ?? [];
+    const rows = bars.map((b) => [b.date, String(b.open), String(b.close), String(b.high), String(b.low), String(b.volume)]);
     return {
       ok: true,
       status: 200,
@@ -111,7 +115,8 @@ function tencentFetchFor(barsByCode: Record<string, KlineDaily[]>): FetchLike {
         code: 0,
         data: {
           [`${m[1]}${code}`]: {
-            qfqday: bars.map((b) => [b.date, String(b.open), String(b.close), String(b.high), String(b.low), String(b.volume)]),
+            qfqday: rows,   // 前复权模式读取
+            day: rows,      // 不复权模式读取（mock 中数据相同，测试可按需区分）
           },
         },
       }),
@@ -273,6 +278,48 @@ describe('runFullSync', () => {
     expect(summary.insertedBars).toBe(0);
     expect(db.kline.size).toBe(before); // 一行都没写
     expect(summary.errors[0].error).toContain('复权');
+  });
+
+  it('自动探测复权模式：qfq 不匹配但 raw 匹配 → 用 raw 成功补齐', async () => {
+    // 模拟场景：本地 DB 存的是不复权(原始)价格，qfq 接口返回前复权价（偏差大）
+    const db = new FakeDb();
+    db.seedStocks(['600000']);
+    // 本地存的是原始价 ~9.0
+    db.seedKline([bar('600000', '2026-07-23', 9.05), bar('600000', '2026-07-24', 9.04), bar('600000', '2026-07-25', 9.0)]);
+    const before = db.kline.size;
+
+    // mock：根据 URL 末位参数区分 qfq/raw 返回不同数据
+    const mixedFetch: FetchLike = async (url: string) => {
+      const m = url.match(/param=(sh|sz|bj)(\d{6})/);
+      if (!m || !url.includes('gtimg')) return { ok: false, status: 500, json: async () => ({}) };
+      const isQfq = url.endsWith(',qfq'); // URL 末位 qfq=前复权，否则=raw
+      // qfq 模式返回前复权价（与本地原始价偏差~40%→校验失败）
+      // raw 模式返回原始价（与本地一致→校验通过）
+      const price = isQfq ? 12.6 : 9.08;
+      const rows = [
+        ['2026-07-23', String(price), String(price + 0.05), String(price + 0.1), String(price - 0.05), '1000000'],
+        ['2026-07-24', String(price + 0.05), String(price + 0.06), String(price + 0.12), String(price - 0.02), '1100000'],
+        ['2026-07-28', String(price + 0.1), String(price + 0.12), String(price + 0.15), String(price + 0.05), '1200000'],
+      ];
+      return {
+        ok: true,
+        status: 200,
+        json: async () => ({
+          code: 0,
+          data: { [`${m[1]}${m[2]}`]: { qfqday: rows, day: rows } },
+        }),
+      };
+    };
+
+    const summary = await runFullSync(db.asDb(), undefined, {
+      fetchImpl: mixedFetch,
+      now: AFTER_CLOSE,
+    });
+    // qfq 失败后自动用 raw 重试 → raw 校验通过 → 补齐缺失的 2026-07-28 那根
+    expect(summary.rejected).toBe(false);
+    expect(summary.patchedStocks).toBe(1);
+    expect(summary.insertedBars).toBe(1); // 只补 2026-07-28（23、24 已存在）
+    expect(db.kline.size).toBe(before + 1);
   });
 
   it('某股三源全挂 → 跳过记错，其他股照常补齐（不中断整批）', async () => {
