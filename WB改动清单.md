@@ -15,7 +15,7 @@
 | S2 fetcher | 2026-07-28 | 三源降级抓取实现+17单测全绿（腾讯→新浪→东财，实测校准） | Gitee ✅ / GitHub ✅(API直推) |
 | S3 diff_patch | 2026-07-28 | 比对+仅INSERT补齐实现+15单测（含无UPDATE/DELETE硬断言） | Gitee ✅ / GitHub ✅(API直推) |
 | S4 ui | 2026-07-28 | 一键补齐面板(自包含)+进度+摘要；补齐仓库缺失的 .eslintrc.js | Gitee ✅ / GitHub ✅(API直推) |
-| S5 background | 2026-07-28 | 后台定时补齐+仅WiFi守卫+首次手动授权；SyncPanel增后台开关；+expo-network依赖 | 待推 |
+| S5 background | 2026-07-28 | 后台定时补齐+仅WiFi守卫+首次手动授权；SyncPanel增后台开关；+expo-network依赖 | Gitee ✅ / GitHub ✅(API直推) |
 | S6 integration | 待办 | 全量测试+数据完整性断言 | 待办 |
 
 ## 详细记录
@@ -66,4 +66,4 @@
 - **[wb修改]** `package.json` +1 依赖 `expo-network@~57.0.0`（仅WiFi守卫需网络类型判断）；npm install `--ignore-scripts --cache /f/workbuddy/npm-cache-s5` 4s 装好
 - **[wb修改]** 新增 `经验落盘/lessons_learned_stage5_background.md`：枚举名 `BackgroundFetchResult`(非Result)、原生模块动态import守测试隔离等
 - 质检：tsc 27→27 ✅（WB 零错）；eslint `.` exit 0/0错误（WB 三文件零 warning）；全量 jest 6 套件 **65/65** ✅（S5 +13，S1–S4 无回归）
-- 双推：本地已就绪，待提交后 Gitee + GitHub 两端推送（见下方提交记录）
+- 双推：`Gitee ✅`（commit `a628d96`）/ `GitHub ✅`（API 直推 commit `4dfb4e9`，远程 head 原 `102982e`）
