@@ -1,0 +1,169 @@
+{
+  "version": "1.0",
+  "loop_design": {
+    "title": "K线增量补齐循环 (混合模式: 全量检查 + 单股实时)",
+    "loop_altitude": "staged",
+    "rationale": "D1: 4 seams, 5 stages — 交易日历 → QuoteFetcher → KlineFiller+增量写入 → 全量补齐UI → 单股补齐UI, 每阶段产物独立可校验,失败模式不同",
+    "selection_log": [
+      {
+        "decision": "D0",
+        "answer": "YES",
+        "justification": "Runnable checks exist: (1) full batch: COUNT(DISTINCT code) WHERE date=today equals total stocks (excluding halted), (2) single stock: MAX(date) == today_trading_day, (3) QuoteFetcher unit tests with mock sources, (4) SQLite incremental write tests"
+      },
+      {
+        "decision": "D1",
+        "answer": "STAGED",
+        "justification": "4 seams: trading calendar → QuoteFetcher (network+normalization) → KlineFiller+incremental write → full batch UI → single stock UI. Each stage has independent verification and different failure modes."
+      },
+      {
+        "decision": "D2",
+        "answer": "See per-stage below",
+        "justification": "S1:generate-validate (calendar utility), S2:generate-validate (QuoteFetcher with 3-source fallback), S3:generate-validate (KlineFiller+SQLite incremental write), S4:batch-process (full batch UI 288 stocks), S5:generate-validate (single stock UI + cache)"
+      },
+      {
+        "decision": "D3",
+        "answer": "hybrid",
+        "justification": "Inner iterations (unit test fixes) auto-retry; stage gates require human review before advancing. Financial data correctness is sensitive, and lifting the 'no network' constraint is architectural-level change."
+      },
+      {
+        "decision": "D4",
+        "answer": "medium",
+        "justification": "5 stages strictly sequential (each depends on prior stable artifact). S4 internal batch processing is single-threaded on RN. S2 3-source fallback is serial, not parallel."
+      },
+      {
+        "decision": "D5",
+        "answer": "See per-stage caps",
+        "justification": "S1=3, S2=5, S3=5, S4=3, S5=3. Risk guards: INSERT OR REPLACE overwrite, first real network request, SQLiteProvider API changes, existing UI file modifications."
+      },
+      {
+        "decision": "D6",
+        "answer": "completeness-first",
+        "justification": "Financial data correctness > speed. Network/data layer is infrastructure — wrong poisons all downstream. Prefer thorough passes over quick半成品."
+      }
+    ],
+    "stages": [
+      {
+        "id": "stage_1",
+        "name": "交易日历工具 (tradingCalendar)",
+        "definition_of_done": "tradingCalendar.ts implements isTradingDay(date), getLastTradingDay(date), getMissingTradingDays(startDate, endDate); 2026 holidays hardcoded; unit tests pass covering weekends, holidays, 调休上班日, edge cases",
+        "loop_pattern": "generate-validate",
+        "feedback_signal": {
+          "check": "npm test -- --testPathPattern='tradingCalendar'",
+          "expect": "pass",
+          "falsifiable_when": "2026 春节/国庆等法定假日漏列导致 isTradingDay 返回 true,或调休上班的周六周日没标记为交易日",
+          "passing_but_wrong": "测试只覆盖了周末判断,没覆盖调休上班日,也没覆盖 getLastTradingDay 在长假后的正确回退"
+        },
+        "stop_conditions": {
+          "max_iterations": 3,
+          "on_failure": "检查 2026 节假日表完整性,补充缺失测试用例,迭代不超过 3 次"
+        },
+        "depends_on": null,
+        "risk_guards": []
+      },
+      {
+        "id": "stage_2",
+        "name": "三源行情拉取器 (QuoteFetcher)",
+        "definition_of_done": "QuoteFetcher.ts implements fetchKline(code, startDate, endDate) with 3-source fallback (Tencent → Sina → Eastmoney); returns normalized KlineDaily[] matching db schema; unit tests with mock fetch for all 3 sources + fallback scenarios",
+        "loop_pattern": "generate-validate",
+        "feedback_signal": {
+          "check": "npm test -- --testPathPattern='QuoteFetcher'",
+          "expect": "pass",
+          "falsifiable_when": "某源返回格式变更导致解析失败但没有正确降级到下一源,或归一化后字段单位不对 (如成交量手 vs 股)",
+          "passing_but_wrong": "mock 三源都返回固定硬编码数据,没测真实网络边界条件 (超时、空响应、停牌返回空数组)"
+        },
+        "stop_conditions": {
+          "max_iterations": 5,
+          "on_failure": "针对失败源调整解析逻辑,补充异常处理,迭代不超过 5 次;三源全失败则升级到人"
+        },
+        "depends_on": ["stage_1"],
+        "risk_guards": [
+          "首次真实网络请求前需确认",
+          "修改归一化字段映射前需确认"
+        ]
+      },
+      {
+        "id": "stage_3",
+        "name": "补齐业务编排 + SQLite 增量写入 (KlineFiller + FillCache)",
+        "definition_of_done": "KlineFiller.ts orchestrates scanMissing + fetch + incremental write + logging; FillCache.ts LRU 30-stock cache; SQLiteProvider adds insertKlinesIncremental method; unit tests with mock fetcher + in-memory sqlite verify row count, data integrity, dedup, SQLITE_BUSY retry",
+        "loop_pattern": "generate-validate",
+        "feedback_signal": {
+          "check": "npm test -- --testPathPattern='KlineFiller|FillCache|SQLiteProvider'",
+          "expect": "pass",
+          "falsifiable_when": "INSERT OR REPLACE 覆盖了旧数据但某些字段为 NULL,或写入后行数没增加 (重复数据未去重)",
+          "passing_but_wrong": "只测了单只成功写入路径,没测批量写入部分失败场景,也没测 SQLITE_BUSY 重试和互斥锁 isFilling"
+        },
+        "stop_conditions": {
+          "max_iterations": 5,
+          "on_failure": "调整写入事务粒度,补充重试逻辑,迭代不超过 5 次;数据一致性问题则升级到人"
+        },
+        "depends_on": ["stage_2"],
+        "risk_guards": [
+          "INSERT OR REPLACE 覆盖已有 kline_daily 记录前需确认",
+          "修改 SQLiteProvider 公共接口前需确认"
+        ]
+      },
+      {
+        "id": "stage_4",
+        "name": "全量补齐 UI (概览页入口)",
+        "definition_of_done": "OverviewScreen adds 「补齐」button; progress bar with X/N completed, Y failed; summary dialog with success count, new klines count, failure list; ask user before recomputing all strategies; e2e on bigdemo 288 stocks completes in ≤ 8min with ≥ 95% success rate",
+        "loop_pattern": "batch-process",
+        "feedback_signal": {
+          "check": "e2e: python3 scripts/verify_e2e_fill_full.py --db kline_5y_bigdemo.sqlite --timeout 480 --min-success-rate 0.95",
+          "expect": "pass",
+          "falsifiable_when": "进度条显示 100% 但实际有大量失败被静默跳过,或补齐后 db 中数据不对但 UI 不报错",
+          "passing_but_wrong": "e2e 只测了全成功场景,没测 50 只分批确认逻辑,也没测熔断后手动恢复"
+        },
+        "stop_conditions": {
+          "max_iterations": 3,
+          "on_failure": "优化批量写入性能,调整分批策略,迭代不超过 3 次;性能瓶颈需架构调整则升级到人"
+        },
+        "depends_on": ["stage_3"],
+        "risk_guards": [
+          "修改现有 OverviewScreen 文件前需说明影响并确认",
+          "单次批量 > 50 只需分批确认"
+        ]
+      },
+      {
+        "id": "stage_5",
+        "name": "单股实时补齐 UI (详情页入口)",
+        "definition_of_done": "DetailScreen useFocusEffect triggers auto-fill for single stock; loading indicator; fills silently in background; refreshes chart + strategy score when done; LRU cache hit returns instantly; e2e: detail page opens and fills within 3s (with network); cache hit < 100ms",
+        "loop_pattern": "generate-validate",
+        "feedback_signal": {
+          "check": "e2e: python3 scripts/verify_e2e_fill_single.py --db kline_5y_bigdemo.sqlite --stock 600519 --ui-timeout 3 --cache-timeout 0.1",
+          "expect": "pass",
+          "falsifiable_when": "UI 显示「已补齐」但 db 实际没写入,或补齐后策略没重算导致星级不更新",
+          "passing_but_wrong": "只测了有缺失场景,没测无缺失场景 (当天已补齐后再打开应直接命中缓存)"
+        },
+        "stop_conditions": {
+          "max_iterations": 3,
+          "on_failure": "优化单股拉取+写入路径,排查 UI 刷新时序问题,迭代不超过 3 次"
+        },
+        "depends_on": ["stage_3"],
+        "risk_guards": [
+          "修改现有 DetailScreen 文件前需说明影响并确认",
+          "useFocusEffect 触发逻辑变更前需确认"
+        ]
+      }
+    ],
+    "human_placement": "hybrid",
+    "maker_checker": {
+      "enabled": true,
+      "role": "adversarial_reviewer",
+      "scope": "Verify: (1) financial data correctness vs 3-source normalization, (2) no module boundary violation (network layer doesn't touch db/UI/strategy/indicator files), (3) backward compatibility of existing SQLiteProvider.importDatabase and 25 strategies, (4) INSERT OR REPLACE doesn't corrupt existing data"
+    },
+    "outer_stop_conditions": {
+      "max_total_iterations": 40,
+      "success": "All 5 stages pass; full batch e2e on bigdemo 288 stocks in ≤ 8min with ≥ 95% success; single stock e2e fills within 3s; all unit tests green; 25 existing strategies still pass regression tests; db data integrity verified",
+      "on_all_failures": "Produce stage-by-stage failure diagnosis with recommendations. If root cause is architectural (e.g. network layer needs native module), escalate to human for design review."
+    },
+    "harness_primitives": [
+      "jest (expo-jest preset)",
+      "expo-sqlite (in-memory for tests)",
+      "mock fetch for QuoteFetcher tests",
+      "python3 e2e verify scripts (verify_e2e_fill_full.py, verify_e2e_fill_single.py)",
+      "git dual-remote (Gitee origin + GitHub github)",
+      ".loop/run-state.md scratch ledger",
+      "push_changelog.md change log"
+    ]
+  }
+}

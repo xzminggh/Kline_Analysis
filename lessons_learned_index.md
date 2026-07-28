@@ -9,6 +9,7 @@
 | 1 | lessons_learned_stage2_perf.md | Stage 2 | performance.now() 埋点 + setImmediate 分片调度，防 300s 超时 | 2026-07-25 |
 | 2 | lessons_learned_stage4_report_ui.md | Stage 4 | SVG K线图 + 6维搜索过滤器 | 2026-07-25 |
 | 3 | lessons_learned_stage5_sdk57_migration.md | Stage 5 | SDK 51→57升级 + EAS Build配置 + 大数据库流式导入 + 策略函数作用域修复 | 2026-07-26 |
+| 4 | lessons_learned_loop_constructor_fill.md | loop-constructor | K线增量补齐循环工程设计: 5阶段STAGED + 三源降级 + 模块边界管理 + D0-D6决策 | 2026-07-28 |
 
 ## 使用方式
 - 新的经验文件命名为 `lessons_learned_<stage>_<topic>.md`
