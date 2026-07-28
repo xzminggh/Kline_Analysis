@@ -233,8 +233,6 @@ export default function HelpScreen() {
         <Text style={styles.bullet}>• 数据来源：行情通过联网实时抓取（腾讯财经 / 东方财富 / 新浪），缓存在本地 SQLite，离线也能查看</Text>
         <Text style={styles.bullet}>• 一键补齐：在「概览页」点「一键补齐最新K线」，联网抓取并补齐本地缺失的日K数据</Text>
         <Text style={styles.bullet}>• 补齐原则：只新增缺失K线，绝不修改已有历史数据；建议在 WiFi 环境下执行</Text>
-        <Text style={styles.bullet}>• 后台自动补齐：可开启「仅 WiFi 自动补齐」，需 Development Build 或正式打包环境</Text>
-        <Text style={styles.bullet}>• 当前环境提示：Expo Go 不支持原生后台任务，前台「一键补齐」不受影响</Text>
       </View>
 
       <View style={styles.section}>

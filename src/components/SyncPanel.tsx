@@ -9,16 +9,10 @@
  *  - 复权拒绝/三源全挂等错误在摘要区展示前 5 条
  */
 
-import React, { useCallback, useEffect, useState } from 'react';
-import { View, Text, TouchableOpacity, StyleSheet, Alert, Switch } from 'react-native';
+import React, { useCallback, useState } from 'react';
+import { View, Text, TouchableOpacity, StyleSheet, Alert } from 'react-native';
 import { useDatabase } from '../database/SQLiteProvider';
 import { runFullSync, type SyncSummary } from '../services/SyncService';
-import {
-  enableBackgroundSync,
-  isBackgroundSyncEnabled,
-  isBackgroundFetchAvailable,
-  unregisterBackgroundSync,
-} from '../services/BackgroundSync';
 
 interface ProgressState {
   done: number;
@@ -31,26 +25,6 @@ export const SyncPanel: React.FC = () => {
   const [syncing, setSyncing] = useState(false);
   const [progress, setProgress] = useState<ProgressState | null>(null);
   const [summary, setSummary] = useState<SyncSummary | null>(null);
-  const [bgEnabled, setBgEnabled] = useState(false);
-  const [bgAvailable, setBgAvailable] = useState(true); // [wb修改] Expo Go 等环境不支持后台任务
-
-  // 进入面板时读取后台补齐是否已授权 + 平台是否支持
-  useEffect(() => {
-    let alive = true;
-    isBackgroundSyncEnabled()
-      .then((on) => {
-        if (alive) setBgEnabled(on);
-      })
-      .catch(() => undefined);
-    isBackgroundFetchAvailable()
-      .then((ok) => {
-        if (alive) setBgAvailable(ok);
-      })
-      .catch(() => undefined);
-    return () => {
-      alive = false;
-    };
-  }, []);
 
   const doSync = useCallback(async () => {
     if (!db) return;
@@ -92,33 +66,6 @@ export const SyncPanel: React.FC = () => {
     );
   }, [isConnected, db, doSync]);
 
-  // 首次手动授权：用户手势切换后台自动补齐（仅WiFi）；失败回滚开关
-  const toggleBackground = useCallback(async (value: boolean) => {
-    if (value && !bgAvailable) {
-      Alert.alert(
-        '后台补齐不可用',
-        '当前环境（如 Expo Go）不支持原生后台任务。此功能需要开发版本(Development Build)或正式打包后才能使用。\n\n前台「一键补齐」功能不受影响。',
-        [{ text: '知道了' }]
-      );
-      return;
-    }
-    setBgEnabled(value);
-    try {
-      if (value) {
-        const ok = await enableBackgroundSync();
-        if (!ok) {
-          setBgAvailable(false); // [wb修改] 注册返回 false = 平台不支持
-          setBgEnabled(false);
-        }
-      } else {
-        await unregisterBackgroundSync();
-      }
-    } catch (e) {
-      setBgEnabled(!value);
-      Alert.alert('后台补齐设置失败', e instanceof Error ? e.message : String(e), [{ text: '确定' }]);
-    }
-  }, [bgAvailable]);
-
   const pct = progress && progress.total > 0 ? Math.round((progress.done / progress.total) * 100) : 0;
 
   return (
@@ -138,21 +85,6 @@ export const SyncPanel: React.FC = () => {
             : '一键补齐最新K线'}
         </Text>
       </TouchableOpacity>
-
-      <View style={styles.bgRow}>
-        <Text style={styles.bgLabel}>后台自动补齐（仅 WiFi）</Text>
-        <Switch
-          value={bgEnabled}
-          onValueChange={(v) => void toggleBackground(v)}
-          thumbColor={bgEnabled ? '#00d4ff' : '#888'}
-          trackColor={{ false: '#3a5068', true: '#0f3460' }}
-        />
-      </View>
-      {!bgAvailable && (
-        <Text style={styles.bgHint}>
-          当前环境不支持后台定时任务（需 Development Build 或正式包），前台补齐不受影响
-        </Text>
-      )}
 
       {syncing && progress && (
         <View style={styles.progressTrack}>
@@ -210,22 +142,6 @@ const styles = StyleSheet.create({
     color: '#1a1a2e',
     fontSize: 15,
     fontWeight: 'bold',
-  },
-  bgRow: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    alignItems: 'center',
-    marginTop: 12,
-  },
-  bgLabel: {
-    color: '#e0e0e0',
-    fontSize: 13,
-  },
-  bgHint: {
-    color: '#f59e0b',
-    fontSize: 11,
-    marginTop: 4,
-    lineHeight: 15,
   },
   progressTrack: {
     height: 6,
