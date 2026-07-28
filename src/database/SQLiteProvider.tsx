@@ -56,6 +56,28 @@ export const useDatabase = () => {
 const DB_NAME = 'kline.sqlite';
 const DB_DIR = `${FileSystemLegacy.documentDirectory}SQLite/`;
 
+/**
+ * [wb修改] 数据库 schema 版本（用 PRAGMA user_version 标记）。
+ * v0 = 旧格式/被污染的演示库（volume 为「手」或混合单位）；
+ * v>=1 = volume 已统一为「万手」。
+ * 启动时对 v0 库重置回干净 seed 并转万手，保证数据格式彻底统一、自愈污染旧库。
+ */
+const SCHEMA_VERSION = 1;
+
+/**
+ * [wb修改] 一次性迁移：把 volume 从「手」统一转为「万手」（÷10000，保留2位），并写入 schema 版本。
+ * 幂等：仅当 user_version < SCHEMA_VERSION 时执行；已迁移库直接跳过，不会二次缩放。
+ */
+const migrateVolumeToWanShou = async (database: SQLite.SQLiteDatabase): Promise<void> => {
+  const row = await database.getFirstAsync<{ user_version: number }>('PRAGMA user_version');
+  const version = row?.user_version ?? 0;
+  if (version >= SCHEMA_VERSION) return;
+  await database.execAsync(
+    'UPDATE kline_daily SET volume = ROUND(volume / 10000.0, 2) WHERE volume > 0;'
+  );
+  await database.execAsync(`PRAGMA user_version = ${SCHEMA_VERSION}`);
+};
+
 export const SQLiteProvider: React.FC<{ children: ReactNode }> = ({ children }) => {
   const [db, setDb] = useState<SQLite.SQLiteDatabase | null>(null);
   const [isConnected, setIsConnected] = useState(false);
@@ -83,10 +105,30 @@ export const SQLiteProvider: React.FC<{ children: ReactNode }> = ({ children }) 
     const initDatabase = async () => {
       setIsLoading(true);
       try {
-        await copyDatabase();
-        // 确保目录存在
         await FileSystemLegacy.makeDirectoryAsync(DB_DIR, { intermediates: true });
+        const localDbPath = `${DB_DIR}${DB_NAME}`;
+
+        // [wb修改] 旧版本（v0）库视为旧格式/被污染（手或混合单位）→ 删掉重置回干净 seed，
+        // 保证 volume 彻底统一为万手；已迁移库（v>=1）直接复用，不重置。
+        const localInfo = await FileSystemLegacy.getInfoAsync(localDbPath);
+        if (localInfo.exists) {
+          const probe = await SQLite.openDatabaseAsync(DB_NAME, {}, DB_DIR.replace(/\/$/, ''));
+          const vrow = await probe.getFirstAsync<{ user_version: number }>('PRAGMA user_version');
+          const version = vrow?.user_version ?? 0;
+          await probe.closeAsync();
+          if (version < SCHEMA_VERSION) {
+            await FileSystemLegacy.deleteAsync(localDbPath, { idempotent: true });
+          }
+        }
+
+        await copyDatabase(); // 仅当本地缺失时从 seed 拷贝
+
         const database = await SQLite.openDatabaseAsync(DB_NAME, {}, DB_DIR.replace(/\/$/, ''));
+        try {
+          await migrateVolumeToWanShou(database); // 转万手 + 置版本（幂等）
+        } catch (mErr) {
+          console.error('Volume migration failed (data may be in old unit):', mErr);
+        }
         setDb(database);
         setIsConnected(true);
       } catch (error) {
@@ -221,6 +263,11 @@ export const SQLiteProvider: React.FC<{ children: ReactNode }> = ({ children }) 
       });
 
       const newDb = await SQLite.openDatabaseAsync(DB_NAME, {}, DB_DIR.replace(/\/$/, ''));
+      try {
+        await migrateVolumeToWanShou(newDb); // 导入库统一转万手 + 置版本，避免下次启动被重置
+      } catch (mErr) {
+        console.error('Imported DB volume migration failed (data may be in old unit):', mErr);
+      }
       setDb(newDb);
       setIsConnected(true);
 
