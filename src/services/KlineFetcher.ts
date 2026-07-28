@@ -11,8 +11,8 @@
  *  - 单源请求超时 8s，失败即降级下一源
  *  - 三源全挂抛 AllSourcesFailedError，由调用方跳过该股并记错（不中断整批）
  *
- * 归一化口径（2026-07-28 沙箱实测校准）：
- *  - volume 统一为「万手」：腾讯/东财原生手 ÷10000；新浪股 ÷1000000（1万手=100万股）；四舍五入保留2位小数
+ * 归一化口径（2026-07-28 实测校准，688111/600000 多源交叉验证）：
+ *  - volume 统一为「万手」：腾讯原生股 ÷1000000；东财原生手 ÷10000；新浪股 ÷1000000（1万手=100万股=1000000股）；四舍五入保留2位小数
  *  - amount 统一为「元」：仅东财提供（f57），腾讯/新浪无 → 置 0
  *    （本地 kline_daily.volume 单位为「万手」，本模块已按此统一，补齐写入即匹配）
  *  - 东财实测：lmt 参数不生效，必须用 beg/end（YYYYMMDD）
@@ -132,7 +132,7 @@ function isValidBar(b: KlineDaily): boolean {
 }
 
 /**
- * 腾讯：data[symbol].qfqday（前复权）或 day（不复权），元素 [date, open, close, high, low, volume(手，归一化为万手), ...]
+ * 腾讯：data[symbol].qfqday（前复权）或 day（不复权），元素 [date, open, close, high, low, volume(股，归一化为万手), ...]
  * 注意字段序是 open,close,high,low —— 和常见 OHLC 不同！
  * @param mode qfq 时优先读 qfqday 字段，raw 时读 day 字段
  */
@@ -159,7 +159,7 @@ export function parseTencent(payload: unknown, code: string, mode: AdjustMode = 
       close: num(r[2]),
       high: num(r[3]),
       low: num(r[4]),
-      volume: Math.round((num(r[5]) / 10000) * 100) / 100, // 腾讯原生「手」→ 万手（÷10000，四舍五入2位）
+      volume: Math.round((num(r[5]) / 1000000) * 100) / 100, // 腾讯原生「股」→ 万手（÷1000000，四舍五入2位；实测 688111=9446373股→9.45万手）
       amount: 0, // 腾讯日K不含成交额
     }))
     .filter(isValidBar);
