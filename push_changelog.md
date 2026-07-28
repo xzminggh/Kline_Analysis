@@ -36,7 +36,7 @@
 
 ---
 
-## 2026-07-28 · `todo` · **trae** · Stage 3 · 补齐编排 + SQLite 增量写入 (KlineFiller + FillCache)
+## 2026-07-28 · `d255972` · **trae** · Stage 3 · 补齐编排 + SQLite 增量写入 (KlineFiller + FillCache)
 
 - **分支**: `trae`
 - **文件**:
@@ -61,7 +61,7 @@
   - 单元测试: 73/73 ✅ (新增 21 个)
   - 全量回归: 73/73 ✅ (无现有测试被破坏)
   - 模块边界: ✅ (新增在 services/, 未碰 db/UI/策略/指标)
-- **双推状态**: 待推送
+- **双推状态**: Gitee ✅ / GitHub ✅
 
 ---
 
