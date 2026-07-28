@@ -127,9 +127,11 @@ export default function OverviewScreen() {
     }
 
     const total = stocks.length;
+    const BATCH_SIZE = 50;
+    const batchCount = Math.ceil(total / BATCH_SIZE);
     const confirmMessage =
-      total > 50
-        ? `即将对 ${total} 只股票进行补齐，数据量较大，建议分批操作。是否继续前 50 只？`
+      batchCount > 1
+        ? `即将对 ${total} 只股票分 ${batchCount} 批进行补齐，是否继续？`
         : `即将对 ${total} 只股票进行补齐，是否继续？`;
 
     Alert.alert('确认补齐', confirmMessage, [
@@ -138,18 +140,30 @@ export default function OverviewScreen() {
         text: '确认',
         onPress: async () => {
           setIsFilling(true);
-          setFillProgress({ current: 0, total: total > 50 ? 50 : total, message: '准备补齐...' });
+          setFillProgress({ current: 0, total, message: '准备补齐...' });
 
           try {
-            // 超过 50 只默认先处理前 50 只
-            const codes = stocks.slice(0, 50).map((s) => s.code);
-            const result = await filler.fillBatch(codes, db, (p) => {
-              setFillProgress({
-                current: p.current,
-                total: p.total,
-                message: `正在补齐 ${p.code} (${p.current}/${p.total})`,
+            const allCodes = stocks.map((s) => s.code);
+            let totalSuccess = 0;
+            let totalFailed = 0;
+            let totalSkipped = 0;
+
+            for (let b = 0; b < batchCount; b++) {
+              const batchStart = b * BATCH_SIZE;
+              const batchCodes = allCodes.slice(batchStart, batchStart + BATCH_SIZE);
+
+              const result = await filler.fillBatch(batchCodes, db, (p) => {
+                setFillProgress({
+                  current: batchStart + p.current,
+                  total,
+                  message: `第${b + 1}/${batchCount}批: ${p.code} (${batchStart + p.current}/${total})`,
+                });
               });
-            });
+
+              totalSuccess += result.success;
+              totalFailed += result.failed;
+              totalSkipped += result.skipped;
+            }
 
             // 刷新 K 线数量
             const newKlineCount = await getKlineCount();
@@ -157,9 +171,9 @@ export default function OverviewScreen() {
 
             const message =
               `补齐完成\n` +
-              `成功: ${result.success}\n` +
-              `失败: ${result.failed}\n` +
-              `跳过: ${result.skipped}`;
+              `成功: ${totalSuccess}\n` +
+              `失败: ${totalFailed}\n` +
+              `跳过: ${totalSkipped}`;
             Alert.alert('补齐完成', message, [{ text: '确定' }]);
           } catch (error: any) {
             console.error('Fill failed:', error);
