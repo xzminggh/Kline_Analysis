@@ -5,7 +5,7 @@
 
 ---
 
-## 2026-07-28 · `7bb72a5` · docs(loop-constructor) · loop-constructor 工程设计图产出 (5 阶段)
+## 2026-07-28 · `9e77ec7` · docs(loop-constructor) · loop-constructor 工程设计图产出 (5 阶段)
 
 - **文件**:
   - [.loop/kline-fill.loop.json](file:///f:/trae%20solo/coze%20stock-screener%E8%81%94%E7%BD%91%E7%89%88/kline_-analysis/.loop/kline-fill.loop.json) — 机器可校验 JSON 设计图
