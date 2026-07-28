@@ -9,10 +9,15 @@
  *  - 复权拒绝/三源全挂等错误在摘要区展示前 5 条
  */
 
-import React, { useCallback, useState } from 'react';
-import { View, Text, TouchableOpacity, StyleSheet, Alert } from 'react-native';
+import React, { useCallback, useEffect, useState } from 'react';
+import { View, Text, TouchableOpacity, StyleSheet, Alert, Switch } from 'react-native';
 import { useDatabase } from '../database/SQLiteProvider';
 import { runFullSync, type SyncSummary } from '../services/SyncService';
+import {
+  enableBackgroundSync,
+  isBackgroundSyncEnabled,
+  unregisterBackgroundSync,
+} from '../services/BackgroundSync';
 
 interface ProgressState {
   done: number;
@@ -25,6 +30,20 @@ export const SyncPanel: React.FC = () => {
   const [syncing, setSyncing] = useState(false);
   const [progress, setProgress] = useState<ProgressState | null>(null);
   const [summary, setSummary] = useState<SyncSummary | null>(null);
+  const [bgEnabled, setBgEnabled] = useState(false);
+
+  // 进入面板时读取后台补齐是否已授权
+  useEffect(() => {
+    let alive = true;
+    isBackgroundSyncEnabled()
+      .then((on) => {
+        if (alive) setBgEnabled(on);
+      })
+      .catch(() => undefined);
+    return () => {
+      alive = false;
+    };
+  }, []);
 
   const doSync = useCallback(async () => {
     if (!db) return;
@@ -66,6 +85,21 @@ export const SyncPanel: React.FC = () => {
     );
   }, [isConnected, db, doSync]);
 
+  // 首次手动授权：用户手势切换后台自动补齐（仅WiFi）；失败回滚开关
+  const toggleBackground = useCallback(async (value: boolean) => {
+    setBgEnabled(value);
+    try {
+      if (value) {
+        await enableBackgroundSync();
+      } else {
+        await unregisterBackgroundSync();
+      }
+    } catch (e) {
+      setBgEnabled(!value);
+      Alert.alert('后台补齐设置失败', e instanceof Error ? e.message : String(e), [{ text: '确定' }]);
+    }
+  }, []);
+
   const pct = progress && progress.total > 0 ? Math.round((progress.done / progress.total) * 100) : 0;
 
   return (
@@ -85,6 +119,16 @@ export const SyncPanel: React.FC = () => {
             : '一键补齐最新K线'}
         </Text>
       </TouchableOpacity>
+
+      <View style={styles.bgRow}>
+        <Text style={styles.bgLabel}>后台自动补齐（仅 WiFi）</Text>
+        <Switch
+          value={bgEnabled}
+          onValueChange={(v) => void toggleBackground(v)}
+          thumbColor={bgEnabled ? '#00d4ff' : '#888'}
+          trackColor={{ false: '#3a5068', true: '#0f3460' }}
+        />
+      </View>
 
       {syncing && progress && (
         <View style={styles.progressTrack}>
@@ -141,6 +185,16 @@ const styles = StyleSheet.create({
     color: '#1a1a2e',
     fontSize: 15,
     fontWeight: 'bold',
+  },
+  bgRow: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    marginTop: 12,
+  },
+  bgLabel: {
+    color: '#e0e0e0',
+    fontSize: 13,
   },
   progressTrack: {
     height: 6,

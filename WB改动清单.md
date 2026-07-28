@@ -15,7 +15,7 @@
 | S2 fetcher | 2026-07-28 | 三源降级抓取实现+17单测全绿（腾讯→新浪→东财，实测校准） | Gitee ✅ / GitHub ✅(API直推) |
 | S3 diff_patch | 2026-07-28 | 比对+仅INSERT补齐实现+15单测（含无UPDATE/DELETE硬断言） | Gitee ✅ / GitHub ✅(API直推) |
 | S4 ui | 2026-07-28 | 一键补齐面板(自包含)+进度+摘要；补齐仓库缺失的 .eslintrc.js | Gitee ✅ / GitHub ✅(API直推) |
-| S5 background | 待办 | 后台定时+仅WiFi守卫 | 待办 |
+| S5 background | 2026-07-28 | 后台定时补齐+仅WiFi守卫+首次手动授权；SyncPanel增后台开关；+expo-network依赖 | 待推 |
 | S6 integration | 待办 | 全量测试+数据完整性断言 | 待办 |
 
 ## 详细记录
@@ -58,3 +58,12 @@
 - **[wb修改]** 新增 `经验落盘/lessons_learned_stage4_ui.md`：eslint 配置策略 + 组件自包含设计 + 历史代码 warning 清单
 - 质检：tsc 27→27 ✅（WB 零错误）；`eslint .` exit 0、0 errors，WB 四个文件零 warning/error；全量 jest 5 套件 52/52 ✅（无回归）
 - 双推：`Gitee ✅`（commit `60249f5`）/ `GitHub ✅`（API 直推 commit `83f6c60`，远程 head 原 `32e267e`）
+
+### S5 background（2026-07-28）
+- **[wb修改]** 新增 `src/services/BackgroundSync.ts`：幂等注册 expo-background-fetch 后台任务（24h/stopOnTerminate:false/startOnBoot:true）+ `guardWifiOnly`/`isWifiOnly`（仅WiFi放行，异常保守跳过）+ 可注入的 `runBackgroundSyncHandler`（守卫→开库→补齐→关库）+ `enableBackgroundSync`(首次手动授权)/`unregisterBackgroundSync`/`isBackgroundSyncEnabled`；模块加载即 `TaskManager.defineTask`（包 try/catch）
+- **[wb修改]** 新增 `src/services/BackgroundSync.test.ts`：13 断言（WiFi/蜂窝/网络异常/无库/补齐抛错分支 + 注册幂等 + 手动授权 + 取消），全程注入假依赖，不依赖 jest 对原生模块 mock
+- **[wb修改]** `src/components/SyncPanel.tsx` 增加「后台自动补齐（仅WiFi）」Switch：即首次手动授权入口，用户手势触发 enableBackgroundSync，失败回滚开关（纯UI改动，不碰数据处理）
+- **[wb修改]** `package.json` +1 依赖 `expo-network@~57.0.0`（仅WiFi守卫需网络类型判断）；npm install `--ignore-scripts --cache /f/workbuddy/npm-cache-s5` 4s 装好
+- **[wb修改]** 新增 `经验落盘/lessons_learned_stage5_background.md`：枚举名 `BackgroundFetchResult`(非Result)、原生模块动态import守测试隔离等
+- 质检：tsc 27→27 ✅（WB 零错）；eslint `.` exit 0/0错误（WB 三文件零 warning）；全量 jest 6 套件 **65/65** ✅（S5 +13，S1–S4 无回归）
+- 双推：本地已就绪，待提交后 Gitee + GitHub 两端推送（见下方提交记录）
