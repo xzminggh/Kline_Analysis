@@ -1,11 +1,26 @@
 # 推送变更清单 (Push Changelog)
 
 > 记录每次 git 双推 (Gitee + GitHub) 的主要变更内容要点，便于快速查看历史推进。
-> 格式：日期 · commit hash · 阶段 · 要点摘要
+> 格式：日期 · commit hash · 分支 · 阶段 · 要点摘要
+>
+> **分支说明**：
+> - `master` — 主分支，稳定版本
+> - `trae` — Trae AI 开发分支，所有 AI 辅助开发的改动都在此分支
 
 ---
 
-## 2026-07-28 · `9e77ec7` · docs(loop-constructor) · loop-constructor 工程设计图产出 (5 阶段)
+## 2026-07-28 · `待推送` · **trae** · docs(init) · Trae AI 开发分支初始化
+
+- **分支**: `trae` (从 master 切出,用于 AI 辅助开发)
+- **要点**:
+  - 创建 trae 分支,标记所有 Trae AI 开发改动
+  - 更新 push_changelog.md 格式: 新增「分支」列
+  - 添加分支说明: master = 稳定版, trae = AI 开发版
+- **双推状态**: 待推送
+
+---
+
+## 2026-07-28 · `9e77ec7` · **master** · docs(loop-constructor) · loop-constructor 工程设计图产出 (5 阶段)
 
 - **文件**:
   - [.loop/kline-fill.loop.json](file:///f:/trae%20solo/coze%20stock-screener%E8%81%94%E7%BD%91%E7%89%88/kline_-analysis/.loop/kline-fill.loop.json) — 机器可校验 JSON 设计图
@@ -30,7 +45,7 @@
 
 ---
 
-## 2026-07-28 · `4d407da` · docs(loop) · 新增 K 线增量补齐循环 Manifest
+## 2026-07-28 · `4d407da` · **master** · docs(loop) · 新增 K 线增量补齐循环 Manifest
 
 - **文件**: [kline-app-fill.loop.md](file:///f:/trae%20solo/coze%20stock-screener联网版/kline_-analysis/kline-app-fill.loop.md)
 - **要点**:
