@@ -1,4 +1,4 @@
-import React, { createContext, useContext, useEffect, useState, ReactNode } from 'react';
+import React, { createContext, useContext, useEffect, useRef, useState, ReactNode } from 'react';
 import * as SQLite from 'expo-sqlite';
 import * as FileSystemLegacy from 'expo-file-system/legacy';
 import { File } from 'expo-file-system';
@@ -60,7 +60,7 @@ const DB_DIR = `${FileSystemLegacy.documentDirectory}SQLite/`;
  * [wb修改] 数据库 schema 版本（用 PRAGMA user_version 标记）。
  * v0 = 旧格式/被污染的演示库（volume 为「手」或混合单位）；
  * v>=1 = volume 已统一为「万手」。
- * 启动时对 v0 库重置回干净 seed 并转万手，保证数据格式彻底统一、自愈污染旧库。
+ * 启动时对 v0 库原地转万手（÷10000）并置版本，保证数据格式彻底统一、自愈污染旧库；不删数据。
  */
 const SCHEMA_VERSION = 1;
 
@@ -88,6 +88,8 @@ export const SQLiteProvider: React.FC<{ children: ReactNode }> = ({ children }) 
   const [db, setDb] = useState<SQLite.SQLiteDatabase | null>(null);
   const [isConnected, setIsConnected] = useState(false);
   const [isLoading, setIsLoading] = useState(true);
+  // [wb修改] 跟踪当前存活的原生句柄，查询时按调用时刻取值，避免 StrictMode 双挂载导致的 stale 闭包竞态
+  const dbRef = useRef<SQLite.SQLiteDatabase | null>(null);
 
   const copyDatabase = async () => {
     const localDbPath = `${DB_DIR}${DB_NAME}`;
@@ -112,29 +114,15 @@ export const SQLiteProvider: React.FC<{ children: ReactNode }> = ({ children }) 
       setIsLoading(true);
       try {
         await FileSystemLegacy.makeDirectoryAsync(DB_DIR, { intermediates: true });
-        const localDbPath = `${DB_DIR}${DB_NAME}`;
-
-        // [wb修改] 旧版本（v0）库视为旧格式/被污染（手或混合单位）→ 删掉重置回干净 seed，
-        // 保证 volume 彻底统一为万手；已迁移库（v>=1）直接复用，不重置。
-        const localInfo = await FileSystemLegacy.getInfoAsync(localDbPath);
-        if (localInfo.exists) {
-          const probe = await SQLite.openDatabaseAsync(DB_NAME, {}, DB_DIR.replace(/\/$/, ''));
-          const vrow = await probe.getFirstAsync<{ user_version: number }>('PRAGMA user_version');
-          const version = vrow?.user_version ?? 0;
-          await probe.closeAsync();
-          if (version < SCHEMA_VERSION) {
-            await FileSystemLegacy.deleteAsync(localDbPath, { idempotent: true });
-          }
-        }
-
-        await copyDatabase(); // 仅当本地缺失时从 seed 拷贝
+        await copyDatabase(); // 仅当本地缺失且存在 seed 时拷贝；Expo Go 无 seed 时落为空库
 
         const database = await SQLite.openDatabaseAsync(DB_NAME, {}, DB_DIR.replace(/\/$/, ''));
         try {
-          await migrateVolumeToWanShou(database); // 转万手 + 置版本（幂等）
+          await migrateVolumeToWanShou(database); // 原地转万手 + 置版本（幂等、安全，不删数据）
         } catch (mErr) {
           console.error('Volume migration failed (data may be in old unit):', mErr);
         }
+        dbRef.current = database;
         setDb(database);
         setIsConnected(true);
       } catch (error) {
@@ -144,31 +132,48 @@ export const SQLiteProvider: React.FC<{ children: ReactNode }> = ({ children }) 
       }
     };
     initDatabase();
+
+    // [wb修改] StrictMode 双挂载/真卸载时关闭连接，避免悬挂句柄导致 "Access to closed resource"
+    return () => {
+      const handle = dbRef.current;
+      dbRef.current = null;
+      setDb(null);
+      setIsConnected(false);
+      if (handle) {
+        handle.closeAsync().catch(() => {});
+      }
+    };
   }, []);
 
   const getTables = async (): Promise<string[]> => {
-    if (!db || !isConnected) return [];
+    const database = dbRef.current;
+    if (!database) return [];
     try {
-      const rows = await db.getAllAsync<{ name: string }>(
+      const rows = await database.getAllAsync<{ name: string }>(
         "SELECT name FROM sqlite_master WHERE type='table'"
       );
       return rows.map((r) => r.name);
-    } catch (error) {
-      console.error('getTables failed:', error);
+    } catch (error: any) {
+      const msg = String(error?.message || error || '');
+      // 重挂载期间的良性竞态（表不存在 / 句柄已关）不刷红控制台
+      if (!msg.includes('no such table') && !msg.includes('closed resource')) {
+        console.error('getTables failed:', error);
+      }
       return [];
     }
   };
 
   const getStockCount = async (): Promise<number> => {
-    if (!db || !isConnected) return 0;
+    const database = dbRef.current;
+    if (!database) return 0;
     try {
-      const row = await db.getFirstAsync<{ count: number }>(
+      const row = await database.getFirstAsync<{ count: number }>(
         'SELECT COUNT(*) as count FROM stocks'
       );
       return row?.count || 0;
     } catch (error: any) {
       const msg = String(error?.message || error || '');
-      if (!msg.includes('no such table')) {
+      if (!msg.includes('no such table') && !msg.includes('closed resource')) {
         console.error('getStockCount failed:', error);
       }
       return 0;
@@ -176,15 +181,16 @@ export const SQLiteProvider: React.FC<{ children: ReactNode }> = ({ children }) 
   };
 
   const getKlineCount = async (): Promise<number> => {
-    if (!db || !isConnected) return 0;
+    const database = dbRef.current;
+    if (!database) return 0;
     try {
-      const row = await db.getFirstAsync<{ count: number }>(
+      const row = await database.getFirstAsync<{ count: number }>(
         'SELECT COUNT(*) as count FROM kline_daily'
       );
       return row?.count || 0;
     } catch (error: any) {
       const msg = String(error?.message || error || '');
-      if (!msg.includes('no such table')) {
+      if (!msg.includes('no such table') && !msg.includes('closed resource')) {
         console.error('getKlineCount failed:', error);
       }
       return 0;
@@ -192,36 +198,45 @@ export const SQLiteProvider: React.FC<{ children: ReactNode }> = ({ children }) 
   };
 
   const getStocks = async (): Promise<Stock[]> => {
-    if (!db) return [];
+    const database = dbRef.current;
+    if (!database) return [];
     try {
-      const rows = await db.getAllAsync<Stock>(
+      const rows = await database.getAllAsync<Stock>(
         'SELECT code, name, market, sector_id AS sectorId, status FROM stocks'
       );
       return rows;
-    } catch (error) {
-      console.error('getStocks failed:', error);
+    } catch (error: any) {
+      const msg = String(error?.message || error || '');
+      if (!msg.includes('closed resource')) {
+        console.error('getStocks failed:', error);
+      }
       return [];
     }
   };
 
   const getKlineByCode = async (code: string): Promise<KlineDaily[]> => {
-    if (!db) return [];
+    const database = dbRef.current;
+    if (!database) return [];
     try {
-      const rows = await db.getAllAsync<KlineDaily>(
+      const rows = await database.getAllAsync<KlineDaily>(
         'SELECT code, date, open, high, low, close, volume, amount FROM kline_daily WHERE code = ? ORDER BY date ASC',
         [code]
       );
       return rows;
-    } catch (error) {
-      console.error('getKlineByCode failed:', error);
+    } catch (error: any) {
+      const msg = String(error?.message || error || '');
+      if (!msg.includes('closed resource')) {
+        console.error('getKlineByCode failed:', error);
+      }
       return [];
     }
   };
 
   const getMeta = async (): Promise<Record<string, string>> => {
-    if (!db || !isConnected) return {};
+    const database = dbRef.current;
+    if (!database) return {};
     try {
-      const rows = await db.getAllAsync<{ key: string; value: string }>(
+      const rows = await database.getAllAsync<{ key: string; value: string }>(
         'SELECT key, value FROM meta'
       );
       const meta: Record<string, string> = {};
@@ -231,7 +246,7 @@ export const SQLiteProvider: React.FC<{ children: ReactNode }> = ({ children }) 
       return meta;
     } catch (error: any) {
       const msg = String(error?.message || error || '');
-      if (!msg.includes('no such table')) {
+      if (!msg.includes('no such table') && !msg.includes('closed resource')) {
         console.error('getMeta failed:', error);
       }
       return {};
@@ -247,6 +262,7 @@ export const SQLiteProvider: React.FC<{ children: ReactNode }> = ({ children }) 
       // 关闭当前数据库连接
       if (db) {
         await db.closeAsync();
+        dbRef.current = null;
         setDb(null);
         setIsConnected(false);
       }
@@ -274,6 +290,7 @@ export const SQLiteProvider: React.FC<{ children: ReactNode }> = ({ children }) 
       } catch (mErr) {
         console.error('Imported DB volume migration failed (data may be in old unit):', mErr);
       }
+      dbRef.current = newDb;
       setDb(newDb);
       setIsConnected(true);
 
