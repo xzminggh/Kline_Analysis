@@ -14,6 +14,7 @@
 | 6 | lessons_learned_stage2_quoteFetcher.md | Stage 2 | QuoteFetcher: 三源降级拉取 + 东财请求头修复 + 模块边界管理 + Mock/真实网络测试 | 2026-07-28 |
 | 7 | lessons_learned_stage3_klineFiller.md | Stage 3 | KlineFiller+FillCache: 补齐编排层 + LRU缓存 + 并发控制 + 熔断机制 | 2026-07-28 |
 | 8 | lessons_learned_stage4_fill_ui.md | Stage 4 | 全量补齐UI + 指标nullable类型治理 + TS类型收窄实践 | 2026-07-28 |
+| 9 | lessons_learned_stage5_fill_single_ui.md | Stage 5 | 单股补齐UI + 行内结果反馈 + 补齐后自动刷新策略分析 | 2026-07-28 |
 
 ## 使用方式
 - 新的经验文件命名为 `lessons_learned_<stage>_<topic>.md`

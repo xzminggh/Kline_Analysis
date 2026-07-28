@@ -51,7 +51,7 @@
   - TypeScript 编译: `npx tsc --noEmit` ✅
   - 单元测试: 73/73 ✅ (无回归)
   - 模块边界: ✅ (UI 层只调用 KlineFiller，不碰数据层)
-- **双推状态**: Gitee ⏳ / GitHub ⏳
+- **双推状态**: Gitee ✅ / GitHub ✅
 
 ---
 
