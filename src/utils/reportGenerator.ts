@@ -227,7 +227,7 @@ export function generateAnalysisReport(results: AnalysisResult[], config: Report
       if (latest) {
         const change = ((latest.close - latest.open) / latest.open * 100).toFixed(2);
         const changeNum = parseFloat(change);
-        report += `最新价 **${latest.close.toFixed(2)}元**（${changeNum >= 0 ? '+' : ''}${change}%），成交量 ${latest.volume.toFixed(0)}万股。`;
+        report += `最新价 **${latest.close.toFixed(2)}元**（${changeNum >= 0 ? '+' : ''}${change}%），成交量 ${latest.volume.toFixed(2)}万手。`;
       }
       report += `综合得分 ${r.analysis.overallScore} 分，买入信号 ${r.analysis.buySignals} 个，卖出信号 ${r.analysis.sellSignals} 个。`;
       report += `状态判断：${getKeyPositionText(r)}。\n\n`;

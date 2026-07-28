@@ -198,7 +198,7 @@ export default function DetailScreen() {
             </View>
             <View style={styles.statItem}>
               <Text style={styles.statLabel}>成交量</Text>
-              <Text style={styles.statValue}>{(latestData.volume).toFixed(0)}万</Text>
+              <Text style={styles.statValue}>{(latestData.volume).toFixed(2)}万手</Text>
             </View>
           </View>
         </View>
@@ -376,7 +376,7 @@ export default function DetailScreen() {
                   <Text style={[styles.klineNum, { color: isUp ? colorUp : colorDown, fontWeight: 'bold' }]}>
                     {item.close.toFixed(2)}
                   </Text>
-                  <Text style={styles.klineNum}>{(item.volume).toFixed(0)}</Text>
+                  <Text style={styles.klineNum}>{(item.volume).toFixed(2)}</Text>
                 </View>
               );
             })}

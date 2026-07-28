@@ -140,7 +140,7 @@ describe('parseTencent', () => {
       close: 9.05, // 第3位是 close 不是 high
       high: 9.06,
       low: 8.91,
-      volume: 5012, // 腾讯原生「手」÷100 → 万股
+      volume: 50.12, // 腾讯原生「手」÷10000 → 万手（四舍五入2位）
       amount: 0,
     });
   });
@@ -151,10 +151,10 @@ describe('parseTencent', () => {
 });
 
 describe('parseSina', () => {
-  it('volume 从「股」归一为「万股」（÷10000）', () => {
+  it('volume 从「股」归一为「万手」（÷1000000）', () => {
     const bars = parseSina(SINA_FIXTURE, '600000');
     expect(bars).toHaveLength(2);
-    expect(bars[0].volume).toBe(5012); // 50118945 股 ÷ 10000 = 5012 万股
+    expect(bars[0].volume).toBe(50.12); // 50118945 股 ÷ 1000000 = 50.12 万手
     expect(bars[0].open).toBe(8.92);
     expect(bars[0].high).toBe(9.06);
     expect(bars[0].low).toBe(8.91);
@@ -176,7 +176,7 @@ describe('parseEastmoney', () => {
       close: 9.05,
       high: 9.06,
       low: 8.91,
-      volume: 5012, // 东财原生「手」÷100 → 万股
+      volume: 50.12, // 东财原生「手」÷10000 → 万手（四舍五入2位）
       amount: 451566860, // 东财提供真实成交额
     });
   });

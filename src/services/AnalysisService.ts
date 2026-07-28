@@ -246,7 +246,7 @@ export function generateCSV(results: AnalysisResult[]): string {
 
     const latestKline = result.latestKline;
     const change = latestKline ? ((latestKline.close - latestKline.open) / latestKline.open * 100).toFixed(2) : '';
-    const volume = latestKline ? latestKline.volume.toFixed(0) : ''; // DB 已是万股，无需再除
+    const volume = latestKline ? latestKline.volume.toFixed(2) : ''; // DB 已是万手，无需再除
     const price = latestKline ? latestKline.close.toFixed(2) : '';
 
     return [

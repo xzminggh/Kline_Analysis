@@ -426,7 +426,7 @@ export default function KlineChart({
         </View>
         <View style={styles.dataRow}>
           <Text style={styles.dataLabel}>成交量</Text>
-          <Text style={styles.dataValue}>{(d.volume).toFixed(2)}万</Text>
+          <Text style={styles.dataValue}>{(d.volume).toFixed(2)}万手</Text>
         </View>
       </View>
     );
