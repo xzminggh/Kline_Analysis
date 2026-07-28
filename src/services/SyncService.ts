@@ -136,27 +136,21 @@ export function checkAdjustBasis(localBars: KlineDaily[], onlineBars: KlineDaily
 // ---------------------------------------------------------------------------
 
 /**
- * 仅 INSERT 缺失 bar。使用 INSERT OR IGNORE + 事务：
- *  - OR IGNORE 兜底防并发/重复插入撞主键（绝不 REPLACE——REPLACE 会先删后插，违反铁律）
+ * 仅 INSERT 缺失 bar。
+ *  - 每条 INSERT OR IGNORE 自身原子，无需显式事务（避免并发 batch 时嵌套事务冲突）
+ *  - OR IGNORE 兜底防重复插入撞主键（绝不 REPLACE——REPLACE 会先删后插，违反铁律）
  *  - 返回实际插入行数（changes 累计）
  */
 export async function insertMissingBars(db: SQLiteDatabase, bars: KlineDaily[]): Promise<number> {
   if (bars.length === 0) return 0;
   let inserted = 0;
-  await db.execAsync('BEGIN');
-  try {
-    for (const b of bars) {
-      const r = await db.runAsync(
-        `INSERT OR IGNORE INTO kline_daily (code, date, open, high, low, close, volume, amount)
-         VALUES (?, ?, ?, ?, ?, ?, ?, ?)`,
-        [b.code, b.date, b.open, b.high, b.low, b.close, b.volume, b.amount]
-      );
-      inserted += r.changes ?? 0;
-    }
-    await db.execAsync('COMMIT');
-  } catch (e) {
-    await db.execAsync('ROLLBACK');
-    throw e;
+  for (const b of bars) {
+    const r = await db.runAsync(
+      `INSERT OR IGNORE INTO kline_daily (code, date, open, high, low, close, volume, amount)
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?)`,
+      [b.code, b.date, b.open, b.high, b.low, b.close, b.volume, b.amount]
+    );
+    inserted += r.changes ?? 0;
   }
   return inserted;
 }
