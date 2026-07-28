@@ -72,6 +72,12 @@ const migrateVolumeToWanShou = async (database: SQLite.SQLiteDatabase): Promise<
   const row = await database.getFirstAsync<{ user_version: number }>('PRAGMA user_version');
   const version = row?.user_version ?? 0;
   if (version >= SCHEMA_VERSION) return;
+  // 空库/尚未导入时 kline_daily 表不存在，跳过转换避免 "no such table" 报错；
+  // 不写 user_version，等真正导入含 kline_daily 的库时再由本函数统一转万手。
+  const tbl = await database.getFirstAsync<{ cnt: number }>(
+    "SELECT COUNT(*) AS cnt FROM sqlite_master WHERE type='table' AND name='kline_daily'"
+  );
+  if (!tbl || tbl.cnt === 0) return;
   await database.execAsync(
     'UPDATE kline_daily SET volume = ROUND(volume / 10000.0, 2) WHERE volume > 0;'
   );
