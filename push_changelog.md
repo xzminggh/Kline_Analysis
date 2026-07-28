@@ -9,6 +9,33 @@
 
 ---
 
+## 2026-07-28 · `todo` · **trae** · Stage 2 · 三源行情拉取器 (QuoteFetcher)
+
+- **分支**: `trae`
+- **文件**:
+  - [src/services/QuoteFetcher.ts](file:///f:/trae%20solo/coze%20stock-screener联网版/kline_-analysis/src/services/QuoteFetcher.ts) — 三源行情拉取核心模块
+  - [src/services/QuoteFetcher.test.ts](file:///f:/trae%20solo/coze%20stock-screener联网版/kline_-analysis/src/services/QuoteFetcher.test.ts) — 11 个单元测试
+  - [scripts/test_real_quote.js](file:///f:/trae%20solo/coze%20stock-screener联网版/kline_-analysis/scripts/test_real_quote.js) — 真实网络验证脚本
+- **功能**:
+  - `fetchKline(code, startDate, endDate)` — 三源降级拉取日K线数据
+  - 三源优先级：腾讯 → 新浪 → 东方财富
+  - 返回统一归一化 `KlineDaily[]` 格式
+  - 单源超时 5s，支持 AbortController
+  - 停牌返回空数组（不报错）
+  - 市场前缀自动推断（沪/深/北交所）
+- **修复**:
+  - 东财源添加 `User-Agent` 和 `Referer` 请求头，解决直连被服务器重置问题
+- **测试覆盖**:
+  - 单元测试: 11 个场景（腾讯成功/降级逻辑/三源全败/停牌/市场前缀/新浪日期过滤/HTTP错误/东财日期格式/状态查询）
+  - 真实网络测试: 腾讯 ✅ 新浪 ✅ 东财 ✅
+- **质检结果**:
+  - 单元测试: 52/52 ✅ (新增 11 个)
+  - 全量回归: 52/52 ✅ (无现有测试被破坏)
+  - 模块边界: ✅ (新增在 services/, 未碰 db/UI/策略/指标)
+- **双推状态**: 待推送
+
+---
+
 ## 2026-07-28 · `eaaaa7d` · **trae** · Stage 1 · 交易日历工具 (tradingCalendar)
 
 - **分支**: `trae`
