@@ -587,6 +587,10 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     marginBottom: 16,
   },
+  emptyText: { // [wb修改] 补齐缺失样式：原引用不存在导致文字用默认黑色，深色背景下几乎不可见
+    color: '#6b7280',
+    fontSize: 15,
+  },
   signalList: {
     // 移除maxHeight限制
   },

@@ -17,6 +17,7 @@
 | S4 ui | 2026-07-28 | 一键补齐面板(自包含)+进度+摘要；补齐仓库缺失的 .eslintrc.js | Gitee ✅ / GitHub ✅(API直推) |
 | S5 background | 2026-07-28 | 后台定时补齐+仅WiFi守卫+首次手动授权；SyncPanel增后台开关；+expo-network依赖 | Gitee ✅ / GitHub ✅(API直推) |
 | S6 integration | 2026-07-28 | verify_sync三断言落地(node:sqlite)、全量质检通过、maker_checker铁律复核 | Gitee ✅ / GitHub ✅(API直推) |
+| S7 tsc-cleanup | 2026-07-28 | 历史tsc错误27→0（用户授权）；修复K01策略MA20真bug+emptyText不可见UX bug | 待推 |
 
 ## 详细记录
 
@@ -75,3 +76,15 @@
 - **[wb修改]** 新增 `经验落盘/lessons_learned_stage6_integration.md`：node:sqlite用法/dup-PK用例特殊处理/铁律复核
 - maker_checker 复核：OverviewScreen 仅+4行接入；全仓库+2088/-57(源码全新增, 锁文件合理更新)；kline_daily 仅INSERT OR IGNORE 由 SyncService.test 硬断言机器验证；S1–S5 双推完整
 - 双推：`Gitee ✅`（commit `d05e20c`）/ `GitHub ✅`（API 直推 commit `8bdc759`，远程 head 原 `7c3ce61`）
+
+### S7 tsc-cleanup（2026-07-28，用户明确授权修改历史代码）
+- **[wb修改]** `src/indicators/Indicators.ts`：15处预热期 null 数组类型修正（局部 `(number|null)[]` + return 断言，对外签名不变，运行时零变化）
+- **[wb修改]** `src/strategies/StrategyEngine.ts`：**修复真bug** —— K01 策略原把 `ma20` 函数本身当数组传入，MA20 支撑/压力分支从未生效；现新增 `ma20Line` 数组正确传入。另 2 处 reduce 空数组补类型标注
+- **[wb修改]** `src/screens/OverviewScreen.tsx`：补缺失的 `emptyText` 样式（**UX修复**：原"没有找到匹配的股票"提示用默认黑色，深色背景下几乎不可见）
+- **[wb修改]** `src/screens/StrategyScreen.tsx`：删除重复 `resultHeader` 样式 key 的**前者**（运行时本被后者覆盖，行为完全不变）
+- **[wb修改]** `src/utils/PerformanceMonitor.ts`：`declare const performance`（纯类型声明，无运行时代码）
+- **[wb修改]** `src/App.tsx`：启动等待 Promise 类型修正（`Promise<void>` + 无参回调，行为不变）
+- **[wb修改]** 新增 `src/types/navigation.d.ts`：react-navigation 全局路由参数表（纯类型声明）
+- **[wb修改]** 新增 `经验落盘/lessons_learned_stage7_tsc_cleanup.md`
+- 质检：**tsc 27→0 首次全绿 exit 0** ✅；jest 65/65 无回归 ✅；eslint 0错/14历史warning不变 ✅；verify_sync exit 0 ✅
+- 双推：本地已就绪，待提交后 Gitee + GitHub 两端推送

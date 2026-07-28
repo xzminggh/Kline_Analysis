@@ -386,12 +386,8 @@ const styles = StyleSheet.create({
     fontSize: 12,
     marginTop: 4,
   },
-  resultHeader: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    alignItems: 'center',
-    marginBottom: 4,
-  },
+  // [wb修改] 删除重复的 resultHeader 定义（TS1117）：对象字面量后者覆盖前者，
+  // 运行时一直生效的是下方版本（flex-start/marginBottom:8），删前者行为完全不变
   buttonRow: {
     flexDirection: 'row',
     gap: 8,

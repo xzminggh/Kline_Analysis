@@ -68,6 +68,7 @@ export function analyzeStock(
   const ema5 = calculateEMA(closes, 5);
   const ema20 = calculateEMA(closes, 20);
   const ma60 = calculateMA(closes, 60);
+  const ma20Line = ma20(closes); // [wb修改] 修复真bug：原第109行把 ma20 函数本身当数组传入K01，MA20支撑/压力分支从未生效
   const rsi14 = calculateRSI(closes, 14);
   const macd = calculateMACD(closes);
   const bollinger = calculateBollinger(closes, 20, 2);
@@ -106,7 +107,7 @@ export function analyzeStock(
   if (isEnabled('S02')) strategies.push(s02TriangleBreakout(highs, lows, closes, n));
   if (isEnabled('S03')) strategies.push(s03HeadShoulder(closes, n));
   if (isEnabled('S04')) strategies.push(s04HammerShootingStar(highs, lows, opens, closes, n));
-  if (isEnabled('K01')) strategies.push(k01MaSupportResistance(closes, highs, lows, opens, ma60, ma20, n));
+  if (isEnabled('K01')) strategies.push(k01MaSupportResistance(closes, highs, lows, opens, ma60, ma20Line, n));
   if (isEnabled('K02')) strategies.push(k02PreviousHighLow(closes, opens, n));
   if (isEnabled('K03')) strategies.push(k03FibonacciRetracement(closes, opens, n));
   if (isEnabled('V01')) strategies.push(v01BollingerSqueeze(bollingerWidth, volumes, volumeMa5, closes, opens, bollinger, n));
@@ -339,13 +340,13 @@ function s01DoubleBottomTop(closes: number[], n: number): StrategyResult {
       acc.push({ idx: idx + n - 20, val });
     }
     return acc;
-  }, []);
+  }, [] as { idx: number; val: number }[]); // [wb修改] 类型标注，无运行时变化
   const recentHighs = closes.slice(n - 20, n).reduce((acc, val, idx) => {
     if (val > closes[idx + n - 20 - 1] && val > closes[Math.min(idx + n - 20 + 1, n - 1)]) {
       acc.push({ idx: idx + n - 20, val });
     }
     return acc;
-  }, []);
+  }, [] as { idx: number; val: number }[]); // [wb修改] 类型标注，无运行时变化
   if (recentLows.length >= 2) {
     const neckline = Math.max(...recentLows.map(l => closes.slice(l.idx, n).reduce((a, b) => Math.max(a, b), 0)));
     if (closes[n] > neckline) {

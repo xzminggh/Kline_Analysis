@@ -15,7 +15,7 @@ export default function App() {
 
   useEffect(() => {
     const initApp = async () => {
-      await new Promise(resolve => setTimeout(resolve, 1000));
+      await new Promise<void>(resolve => setTimeout(() => resolve(), 1000)); // [wb修改] 类型修复：Promise<void>+无参回调，运行时行为不变
       setIsReady(true);
     };
     initApp();

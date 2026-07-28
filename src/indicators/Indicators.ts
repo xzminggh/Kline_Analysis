@@ -23,7 +23,7 @@ export function calculateEMA(data: number[], period: number): number[] {
 }
 
 export function calculateRSI(data: number[], period: number = 14): number[] {
-  const result: number[] = [];
+  const result: (number | null)[] = [];
   for (let i = 0; i < period; i++) {
     result.push(null);
   }
@@ -50,7 +50,7 @@ export function calculateRSI(data: number[], period: number = 14): number[] {
     const rsVal = avgGain / (avgLoss + 1e-10);
     result.push(100 - (100 / (1 + rsVal)));
   }
-  return result;
+  return result as number[];
 }
 
 export function calculateMACD(data: number[], fast: number = 12, slow: number = 26, signal: number = 9): { macd: number[], signal: number[], histogram: number[] } {
@@ -70,8 +70,8 @@ export function calculateMACD(data: number[], fast: number = 12, slow: number = 
 
 export function calculateBollinger(data: number[], period: number = 20, stdDev: number = 2): { upper: number[], middle: number[], lower: number[] } {
   const middle = calculateMA(data, period);
-  const upper: number[] = [];
-  const lower: number[] = [];
+  const upper: (number | null)[] = [];
+  const lower: (number | null)[] = [];
   for (let i = 0; i < data.length; i++) {
     if (middle[i] === null) {
       upper.push(null);
@@ -87,11 +87,11 @@ export function calculateBollinger(data: number[], period: number = 20, stdDev: 
     upper.push(middle[i] + stdDev * std);
     lower.push(middle[i] - stdDev * std);
   }
-  return { upper, middle, lower };
+  return { upper: upper as number[], middle, lower: lower as number[] };
 }
 
 export function calculateATR(high: number[], low: number[], close: number[], period: number = 14): number[] {
-  const result: number[] = [];
+  const result: (number | null)[] = [];
   for (let i = 0; i < period; i++) {
     result.push(null);
   }
@@ -114,11 +114,11 @@ export function calculateATR(high: number[], low: number[], close: number[], per
     const atr = ((result[result.length - 1]! * (period - 1)) + tr) / period;
     result.push(atr);
   }
-  return result;
+  return result as number[];
 }
 
 export function calculateCCI(high: number[], low: number[], close: number[], period: number = 20): number[] {
-  const result: number[] = [];
+  const result: (number | null)[] = [];
   for (let i = 0; i < period; i++) {
     result.push(null);
   }
@@ -137,29 +137,29 @@ export function calculateCCI(high: number[], low: number[], close: number[], per
     const tp = (high[i] + low[i] + close[i]) / 3;
     result.push((tp - tpAvg) / (0.015 * md));
   }
-  return result;
+  return result as number[];
 }
 
 export function calculateMOM(data: number[], period: number = 10): number[] {
-  const result: number[] = [];
+  const result: (number | null)[] = [];
   for (let i = 0; i < period; i++) {
     result.push(null);
   }
   for (let i = period; i < data.length; i++) {
     result.push(data[i] - data[i - period]);
   }
-  return result;
+  return result as number[];
 }
 
 export function calculateROC(data: number[], period: number = 10): number[] {
-  const result: number[] = [];
+  const result: (number | null)[] = [];
   for (let i = 0; i < period; i++) {
     result.push(null);
   }
   for (let i = period; i < data.length; i++) {
     result.push((data[i] - data[i - period]) / data[i - period] * 100);
   }
-  return result;
+  return result as number[];
 }
 
 export function calculateVolumeMA(volume: number[], period: number): number[] {
@@ -180,7 +180,7 @@ export function calculateFibonacciLevels(high: number, low: number): { level0: n
 }
 
 export function calculateBollingerWidth(upper: number[], lower: number[], middle: number[]): number[] {
-  const width: number[] = [];
+  const width: (number | null)[] = [];
   for (let i = 0; i < upper.length; i++) {
     if (upper[i] === null || lower[i] === null || middle[i] === null || middle[i] === 0) {
       width.push(null);
@@ -188,7 +188,7 @@ export function calculateBollingerWidth(upper: number[], lower: number[], middle
       width.push((upper[i] - lower[i]) / middle[i]);
     }
   }
-  return width;
+  return width as number[];
 }
 
 export function calculateGuppyMA(data: number[]): { shortTerm: number[][], longTerm: number[][] } {
@@ -200,8 +200,8 @@ export function calculateGuppyMA(data: number[]): { shortTerm: number[][], longT
 }
 
 export function findLocalExtrema(data: number[], windowSize: number): { highs: number[], lows: number[] } {
-  const highs: number[] = [];
-  const lows: number[] = [];
+  const highs: (number | null)[] = [];
+  const lows: (number | null)[] = [];
   for (let i = 0; i < data.length; i++) {
     if (i < windowSize || i >= data.length - windowSize) {
       highs.push(null);
@@ -217,11 +217,11 @@ export function findLocalExtrema(data: number[], windowSize: number): { highs: n
     highs.push(isHigh ? data[i] : null);
     lows.push(isLow ? data[i] : null);
   }
-  return { highs, lows };
+  return { highs: highs as number[], lows: lows as number[] };
 }
 
 export function calculateSlope(data: number[], period: number = 1): number[] {
-  const result: number[] = [];
+  const result: (number | null)[] = [];
   for (let i = 0; i < period; i++) {
     result.push(null);
   }
@@ -232,11 +232,11 @@ export function calculateSlope(data: number[], period: number = 1): number[] {
       result.push(data[i] - data[i - period]);
     }
   }
-  return result;
+  return result as number[];
 }
 
 export function calculateAmplitude(high: number[], low: number[], period: number = 20): number[] {
-  const result: number[] = [];
+  const result: (number | null)[] = [];
   for (let i = 0; i < period; i++) {
     result.push(null);
   }
@@ -250,5 +250,5 @@ export function calculateAmplitude(high: number[], low: number[], period: number
     }
     result.push((maxHigh - minLow) / minLow * 100);
   }
-  return result;
+  return result as number[];
 }

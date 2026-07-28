@@ -4,6 +4,9 @@
  */
 
 // 兼容性处理：Hermes 原生支持 performance.now()
+// [wb修改] 类型修复：tsconfig lib 不含 DOM，为全局 performance 补类型声明（仅类型，无运行时代码）
+declare const performance: undefined | { now: () => number };
+
 const getNow = (): number => {
   if (typeof performance !== 'undefined' && performance.now) {
     return performance.now();
