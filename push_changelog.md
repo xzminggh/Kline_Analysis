@@ -36,6 +36,25 @@
 
 ---
 
+## 2026-07-28 · Stage 5 · **trae** · 单股实时补齐 UI (DetailScreen 入口)
+
+- **分支**: `trae`
+- **文件**:
+  - [src/screens/DetailScreen.tsx](file:///f:/trae%20solo/coze%20stock-screener联网版/kline_-analysis/src/screens/DetailScreen.tsx) — 单股补齐 UI 入口
+- **功能**:
+  - DetailScreen 新增「补齐此股」按钮，调用 `KlineFiller.fillSingle(code, db)`
+  - 补齐成功后自动刷新 K 线数据与策略分析
+  - 行内结果提示（3秒自动消失）：成功/已最新/失败
+  - 补齐中禁用按钮，防止重复点击
+  - 数据库未连接时弹窗提示
+- **质检结果**:
+  - TypeScript 编译: `npx tsc --noEmit` ✅
+  - 单元测试: 73/73 ✅ (无回归)
+  - 模块边界: ✅ (UI 层只调用 KlineFiller，不碰数据层)
+- **双推状态**: Gitee ⏳ / GitHub ⏳
+
+---
+
 ## 2026-07-28 · `1d9b0f9` · **trae** · Stage 4 · 全量补齐 UI + TypeScript 全量修复
 
 - **分支**: `trae`
