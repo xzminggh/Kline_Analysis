@@ -11,7 +11,7 @@
 | 阶段 | 日期 | 主要改变 | 双推状态 |
 |------|------|----------|----------|
 | S0 设计与清单 | 2026-07-28 | loop-constructor 工程设计并过 linter + 建立 WB 改动清单与经验落盘机制 | Gitee ✅ / GitHub ✅(API直推) |
-| S1 scaffold | 待办 | 建 KlineFetcher / SyncService 模块骨架 | 待办 |
+| S1 scaffold | 2026-07-28 | 建 KlineFetcher/SyncService/verify_sync 骨架，tsc 零新增错误 | Gitee ✅ / GitHub ✅(API直推) |
 | S2 fetcher | 待办 | 三源降级抓取实现 | 待办 |
 | S3 diff_patch | 待办 | 比对+仅INSERT补齐 | 待办 |
 | S4 ui | 待办 | 一键补齐按钮+进度+摘要 | 待办 |
@@ -27,3 +27,11 @@
 - **[wb修改]** 新增 `经验落盘/lessons_learned_stage0_loop_design.md`：阶段经验
 - 双推：`Gitee ✅`（commit `9a7f4d7`，已 rebase 到远程 `f174c35` 之上）/ `GitHub ✅`（老徐提供 PAT，走 REST API Git Data 直推；token 一次性使用不落盘）
 - 既定双推通道：Gitee = 沙箱 git CLI 直推；GitHub = REST API（Git Data：blob→tree→commit→ref），git CLI 443 被沙箱墙不可用
+
+### S1 scaffold（2026-07-28）
+- **[wb修改]** 新增 `src/services/KlineFetcher.ts`：三源降级骨架（腾讯→新浪→东财优先级常量、市场前缀转换含北交所、错误分级、三家端点 URL 注释齐备）
+- **[wb修改]** 新增 `src/services/SyncService.ts`：补齐服务骨架（游标/结果/摘要类型、diffMissingBars 纯函数、复权校验桩、runFullSync 桩、meta 游标键）
+- **[wb修改]** 新增 `scripts/verify_sync.js`：数据完整性断言框架（S6 填充三大断言）
+- **[wb修改]** 新增 `经验落盘/lessons_learned_stage1_scaffold.md`：阶段经验（沙箱 safe-delete 拦 npm 清理的新坑与绕法）
+- 质检：tsc 基线对比 27→27（历史错误，非 WB），**新增文件零错误**；verify_sync 骨架自检 exit 0；lock 文件被 npm 自动净化已回滚（只加不改）
+- 双推：`Gitee ✅` / `GitHub ✅`（API 直推）
