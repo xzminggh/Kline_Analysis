@@ -36,6 +36,30 @@
 
 ---
 
+## 2026-07-28 · **trae** · 正式联网版 v2.0.0
+
+- **分支**: `trae`
+- **版本**: v2.0.0（正式联网版）
+- **变更**:
+  - 删除 CSV 导出功能（导出CSV按钮、generateCSV 函数、相关样式）
+  - HelpScreen 更新说明：移除 CSV 相关描述，改为 Markdown 报告
+  - app.json 版本号升级为 2.0.0
+  - 使用说明书升级为 v2.0.0，新增「K线补齐功能」章节
+  - 全量补齐改为分批循环处理全部股票（不再限制 50 只）
+- **文件**:
+  - [src/screens/StrategyScreen.tsx](file:///f:/trae%20solo/coze%20stock-screener联网版/kline_-analysis/src/screens/StrategyScreen.tsx)
+  - [src/services/AnalysisService.ts](file:///f:/trae%20solo/coze%20stock-screener联网版/kline_-analysis/src/services/AnalysisService.ts)
+  - [src/screens/HelpScreen.tsx](file:///f:/trae%20solo/coze%20stock-screener联网版/kline_-analysis/src/screens/HelpScreen.tsx)
+  - [src/screens/OverviewScreen.tsx](file:///f:/trae%20solo/coze%20stock-screener联网版/kline_-analysis/src/screens/OverviewScreen.tsx)
+  - [app.json](file:///f:/trae%20solo/coze%20stock-screener联网版/kline_-analysis/app.json)
+  - [使用说明书_v1.0.md](file:///f:/trae%20solo/coze%20stock-screener联网版/kline_-analysis/使用说明书_v1.0.md)
+- **质检结果**:
+  - TypeScript 编译: `npx tsc --noEmit` ✅
+  - 单元测试: 73/73 ✅ (无回归)
+- **双推状态**: Gitee ⏳ / GitHub ⏳
+
+---
+
 ## 2026-07-28 · Stage 5 · **trae** · 单股实时补齐 UI (DetailScreen 入口)
 
 - **分支**: `trae`

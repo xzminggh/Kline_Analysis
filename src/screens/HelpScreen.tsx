@@ -28,7 +28,7 @@ export default function HelpScreen() {
         <Text style={styles.bullet}>• 智能评分系统（1-5星评级）</Text>
         <Text style={styles.bullet}>• K线图支持单指拖动平移、双击重置</Text>
         <Text style={styles.bullet}>• 实时显示十字光标和数据面板</Text>
-        <Text style={styles.bullet}>• 一键导出完整分析报告为CSV格式</Text>
+        <Text style={styles.bullet}>• 一键生成 Markdown 分析报告（Top20 / 全量）</Text>
       </View>
 
       <View style={styles.section}>
@@ -212,12 +212,11 @@ export default function HelpScreen() {
 
       <View style={styles.section}>
         <Text style={styles.sectionTitle}>策略页</Text>
-        <Text style={styles.bullet}>功能：策略配置 + 筛选结果导出</Text>
+        <Text style={styles.bullet}>功能：策略配置 + 筛选结果 + 报告导出</Text>
         <Text style={styles.bullet}>• 策略开关：可单独启用/禁用每个策略</Text>
         <Text style={styles.bullet}>• 策略分类：按8大类别筛选查看策略</Text>
         <Text style={styles.bullet}>• 筛选结果：显示评分最高的20只股票</Text>
-        <Text style={styles.bullet}>• 报告导出：支持生成Top20报告或全部报告</Text>
-        <Text style={styles.bullet}>• 导出CSV：导出完整分析报告</Text>
+        <Text style={styles.bullet}>• 报告导出：支持生成 Top20 或全量 Markdown 报告</Text>
       </View>
 
       <View style={styles.section}>

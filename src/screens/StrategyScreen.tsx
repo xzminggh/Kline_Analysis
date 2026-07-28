@@ -2,7 +2,7 @@ import React, { useState, useCallback } from 'react';
 import { View, Text, StyleSheet, ScrollView, TouchableOpacity, ActivityIndicator } from 'react-native';
 import { useFocusEffect } from '@react-navigation/native';
 import { useDatabase } from '../database/SQLiteProvider';
-import { runAnalysis, getAllAnalysis, getAnalysisSummary, AnalysisResult, generateCSV, STRATEGIES, CATEGORIES, toggleStrategy as toggleStrategyService, getStrategyState, getEnabledStrategyIds } from '../services/AnalysisService';
+import { runAnalysis, getAllAnalysis, getAnalysisSummary, AnalysisResult, STRATEGIES, CATEGORIES, toggleStrategy as toggleStrategyService, getStrategyState, getEnabledStrategyIds } from '../services/AnalysisService';
 import { generateAnalysisReport } from '../utils/reportGenerator';
 import * as FileSystem from 'expo-file-system/legacy';
 import * as Sharing from 'expo-sharing';
@@ -95,13 +95,6 @@ export default function StrategyScreen() {
     }
   };
 
-  const handleExportCSV = async () => {
-    const csv = generateCSV(analysisResults);
-    const filePath = `${FileSystem.documentDirectory}analysis_report.csv`;
-    await FileSystem.writeAsStringAsync(filePath, csv);
-    await Sharing.shareAsync(filePath);
-  };
-
   const handleGenerateReport = async (top20Only: boolean) => {
     const results = top20Only
       ? [...analysisResults].sort((a, b) => b.analysis.overallScore - a.analysis.overallScore).slice(0, 20)
@@ -167,9 +160,6 @@ export default function StrategyScreen() {
                   <Text style={styles.reportButtonText}>全部报告</Text>
                 </TouchableOpacity>
               </View>
-              <TouchableOpacity style={styles.exportButton} onPress={handleExportCSV}>
-                <Text style={styles.exportButtonText}>导出CSV</Text>
-              </TouchableOpacity>
             </View>
           </View>
           <Text style={styles.hintText}>
@@ -329,17 +319,6 @@ const styles = StyleSheet.create({
   runButtonText: {
     color: '#0a0a0f',
     fontSize: 18,
-    fontWeight: 'bold',
-  },
-  exportButton: {
-    backgroundColor: '#10b981',
-    paddingHorizontal: 14,
-    paddingVertical: 8,
-    borderRadius: 6,
-  },
-  exportButtonText: {
-    color: '#ffffff',
-    fontSize: 13,
     fontWeight: 'bold',
   },
   centered: {
