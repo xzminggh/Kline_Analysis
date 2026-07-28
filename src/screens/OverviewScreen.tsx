@@ -6,6 +6,7 @@ import { getAnalysisSummary, getAllAnalysis, runAnalysis, getFilteredResults, ge
 import * as DocumentPicker from 'expo-document-picker';
 import SearchFilter, { FilterState } from '../components/SearchFilter';
 import Dashboard from '../components/Dashboard';
+import { SyncPanel } from '../components/SyncPanel'; // [wb修改] 联网补齐面板
 
 function StarRating({ rating }: { rating: number }) {
   return (
@@ -215,6 +216,9 @@ export default function OverviewScreen() {
           <Text style={styles.importButtonText}>导入数据库</Text>
         </TouchableOpacity>
       </View>
+
+      {/* [wb修改] 联网补齐面板（自包含组件，仅此一行接入） */}
+      <SyncPanel />
 
       <View style={styles.section}>
         <Text style={styles.sectionTitle}>数据库信息</Text>
