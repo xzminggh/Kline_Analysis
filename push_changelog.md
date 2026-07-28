@@ -36,6 +36,35 @@
 
 ---
 
+## 2026-07-28 · `todo` · **trae** · Stage 3 · 补齐编排 + SQLite 增量写入 (KlineFiller + FillCache)
+
+- **分支**: `trae`
+- **文件**:
+  - [src/services/KlineFiller.ts](file:///f:/trae%20solo/coze%20stock-screener联网版/kline_-analysis/src/services/KlineFiller.ts) — 补齐业务编排核心
+  - [src/services/KlineFiller.test.ts](file:///f:/trae%20solo/coze%20stock-screener联网版/kline_-analysis/src/services/KlineFiller.test.ts) — 14 个单元测试
+  - [src/services/FillCache.ts](file:///f:/trae%20solo/coze%20stock-screener联网版/kline_-analysis/src/services/FillCache.ts) — LRU 补齐缓存
+  - [src/services/FillCache.test.ts](file:///f:/trae%20solo/coze%20stock-screener联网版/kline_-analysis/src/services/FillCache.test.ts) — 8 个单元测试
+- **功能**:
+  - `KlineFiller.fillSingle()` — 单股补齐：查最新日期 → 算缺失交易日 → 拉取 → 写入 → 更新缓存
+  - `KlineFiller.fillBatch()` — 批量补齐：遍历股票列表，进度回调，逐只补齐
+  - `FillCache` — LRU 缓存最近 30 只股票，防止短期内重复补齐，支持 TTL
+  - 互斥锁 `isFilling` 防止并发补齐同一批次
+  - 熔断机制：连续失败 > 3 次则暂停当前批次
+  - `INSERT OR REPLACE` 批量写入 K 线，单条失败不影响其他
+- **模块边界**:
+  - KlineFiller 仅编排 tradingCalendar + QuoteFetcher + FillCache + db，不碰 UI/策略/指标
+  - FillCache 纯内存，不碰 db
+- **测试覆盖**:
+  - FillCache: LRU 淘汰 / 重复 set / TTL 过期 / clear / entries
+  - KlineFiller: 数据库未连接 / 已有最新数据 / 缓存命中 / 拉取成功写入 / 拉取失败 / 停牌 / force 模式 / 批量补齐 / 并发拒绝 / 熔断 / 进度回调 / isFilling 状态
+- **质检结果**:
+  - 单元测试: 73/73 ✅ (新增 21 个)
+  - 全量回归: 73/73 ✅ (无现有测试被破坏)
+  - 模块边界: ✅ (新增在 services/, 未碰 db/UI/策略/指标)
+- **双推状态**: 待推送
+
+---
+
 ## 2026-07-28 · `eaaaa7d` · **trae** · Stage 1 · 交易日历工具 (tradingCalendar)
 
 - **分支**: `trae`
