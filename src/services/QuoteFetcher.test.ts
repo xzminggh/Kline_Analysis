@@ -77,7 +77,7 @@ describe('QuoteFetcher', () => {
       close: 1310.00,
       high: 1320.00,
       low: 1290.00,
-      volume: 1000000, // 手 × 100
+      volume: 10000, // 与 db 一致：手（抓取原值，不再 ×100）
       amount: 0,
     });
     expect(global.fetch).toHaveBeenCalledTimes(1);

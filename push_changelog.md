@@ -9,6 +9,24 @@
 
 ---
 
+## 2026-07-28 · **trae** · v2.0.1 修复 · 成交量单位 bug 修复
+
+- **分支**: `trae`
+- **触发**: 用户在 v2.0.0 云打包过程中反馈"成交量应该转换成以手为单位，才和db里的匹配起来"
+- **Bug 根因**: [src/services/QuoteFetcher.ts](file:///f:/trae%20solo/coze%20stock-screener联网版/kline_-analysis/src/services/QuoteFetcher.ts) 三个数据源 (腾讯/新浪/东财) 的 volume 字段均做了 `* 100` 转换，注释为"手 → 股"，但 db 实际存储也是"手"单位，导致补齐的成交量比真实值大 100 倍
+- **修复文件**:
+  - [src/services/QuoteFetcher.ts](file:///f:/trae%20solo/coze%20stock-screener联网版/kline_-analysis/src/services/QuoteFetcher.ts) — 3 处 volume 去掉 `* 100`，保持原值与 db 一致
+  - [src/services/QuoteFetcher.test.ts](file:///f:/trae%20solo/coze%20stock-screener联网版/kline_-analysis/src/services/QuoteFetcher.test.ts) — L80 测试预期值从 `1000000` 修正为 `10000`
+  - [app.json](file:///f:/trae%20solo/coze%20stock-screener联网版/kline_-analysis/app.json) — 版本号 `2.0.0` → `2.0.1`
+- **经验落盘**: [lessons_learned_v2_1_volume_unit_fix.md](file:///f:/trae%20solo/coze%20stock-screener联网版/kline_-analysis/lessons_learned_v2_1_volume_unit_fix.md)
+- **质检结果**:
+  - TypeScript 编译: ✅ 0 错误
+  - 单元测试: ✅ 73/73 全通过
+  - 模块边界: ✅ 仅改 services/QuoteFetcher.ts + test + app.json
+- **后续动作**: 触发新一次 EAS Build 云打包 v2.0.1
+
+---
+
 ## 2026-07-28 · `95e8863` · **trae** · Stage 2 · 三源行情拉取器 (QuoteFetcher)
 
 - **分支**: `trae`

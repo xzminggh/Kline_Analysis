@@ -102,7 +102,7 @@ async function fetchFromTencent(
       close: parseFloat(item[2]),
       high: parseFloat(item[3]),
       low: parseFloat(item[4]),
-      volume: parseFloat(item[5]) * 100, // 手 → 股
+      volume: parseFloat(item[5]), // 与 db 一致：手（腾讯返回即为手）
       amount: 0, // 腾讯不返回成交额
     }));
   } catch (err) {
@@ -157,7 +157,7 @@ async function fetchFromSina(
       close: parseFloat(item.close),
       high: parseFloat(item.high),
       low: parseFloat(item.low),
-      volume: parseFloat(item.volume) * 100, // 手 → 股
+      volume: parseFloat(item.volume), // 与 db 一致：手
       amount: 0,
     }));
   } catch (err) {
@@ -217,7 +217,7 @@ async function fetchFromEastmoney(
         close: parseFloat(parts[2]),
         high: parseFloat(parts[3]),
         low: parseFloat(parts[4]),
-        volume: parseFloat(parts[5]) * 100, // 手 → 股
+        volume: parseFloat(parts[5]), // 与 db 一致：手
         amount: parseFloat(parts[6]) || 0,  // 成交额（元）
       };
     });

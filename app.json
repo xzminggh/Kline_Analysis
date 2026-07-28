@@ -2,7 +2,7 @@
   "expo": {
     "name": "K线策略筛选器",
     "slug": "kline-screener",
-    "version": "2.0.0",
+    "version": "2.0.1",
     "orientation": "portrait",
     "icon": "./icon.png",
     "userInterfaceStyle": "dark",

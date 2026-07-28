@@ -16,6 +16,7 @@
 | 8 | lessons_learned_stage4_fill_ui.md | Stage 4 | 全量补齐UI + 指标nullable类型治理 + TS类型收窄实践 | 2026-07-28 |
 | 9 | lessons_learned_stage5_fill_single_ui.md | Stage 5 | 单股补齐UI + 行内结果反馈 + 补齐后自动刷新策略分析 | 2026-07-28 |
 | 10 | lessons_learned_v2_release.md | v2.0.0发布 | CSV功能移除 + 全量补齐分批优化 + 版本升级v2.0.0 | 2026-07-28 |
+| 11 | lessons_learned_v2_1_volume_unit_fix.md | v2.0.1修复 | 成交量单位bug修复：去掉*100转换，与db一致用"手"单位 + Edit多行替换陷阱记录 | 2026-07-28 |
 
 ## 使用方式
 - 新的经验文件命名为 `lessons_learned_<stage>_<topic>.md`
