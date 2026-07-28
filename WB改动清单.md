@@ -13,7 +13,7 @@
 | S0 设计与清单 | 2026-07-28 | loop-constructor 工程设计并过 linter + 建立 WB 改动清单与经验落盘机制 | Gitee ✅ / GitHub ✅(API直推) |
 | S1 scaffold | 2026-07-28 | 建 KlineFetcher/SyncService/verify_sync 骨架，tsc 零新增错误 | Gitee ✅ / GitHub ✅(API直推) |
 | S2 fetcher | 2026-07-28 | 三源降级抓取实现+17单测全绿（腾讯→新浪→东财，实测校准） | Gitee ✅ / GitHub ✅(API直推) |
-| S3 diff_patch | 待办 | 比对+仅INSERT补齐 | 待办 |
+| S3 diff_patch | 2026-07-28 | 比对+仅INSERT补齐实现+15单测（含无UPDATE/DELETE硬断言） | Gitee ✅ / GitHub ✅(API直推) |
 | S4 ui | 待办 | 一键补齐按钮+进度+摘要 | 待办 |
 | S5 background | 待办 | 后台定时+仅WiFi守卫 | 待办 |
 | S6 integration | 待办 | 全量测试+数据完整性断言 | 待办 |
@@ -42,4 +42,11 @@
 - **[wb修改]** `package.json` +1 行 devDep `@react-native/jest-preset`（jest-expo 57 的 peer 依赖，不装 jest 起不来——质检基建必需）；lock 同步更新（npm 顺带清了 lock 内已不被引用的 @react-navigation/stack 残留条目，不影响任何已安装行为）
 - **[wb修改]** 新增 `经验落盘/lessons_learned_stage2_fetcher.md`：三家接口实测差异表（东财 lmt 参数失效须用 beg/end 等）
 - 质检：单测 17/17 ✅；全量 jest 4套件 37/37 ✅（现有测试无一变红）；tsc 基线 27→27 ✅
+- 双推：`Gitee ✅` / `GitHub ✅`（API 直推）
+
+### S3 diff_patch（2026-07-28）
+- **[wb修改]** 实现 `src/services/SyncService.ts`：游标准备(LEFT JOIN)→当日未收盘bar过滤(盘中09:15–15:05剔除)→复权基准校验(重叠bar收盘价偏差>1%整股拒绝)→diff→事务内 INSERT OR IGNORE 补齐→meta游标；单股失败/拒绝不中断整批，分批并发(批5)
+- **[wb修改]** 新增 `src/services/SyncService.test.ts`：15 断言，FakeDb 记录全部 SQL 做**铁律硬断言**（kline_daily 上任何 UPDATE/DELETE/REPLACE 即失败）+ 行数仅增 + 已有行原样 + 复权拒绝零写入
+- **[wb修改]** 新增 `经验落盘/lessons_learned_stage3_diff_patch.md`：INSERT OR IGNORE vs REPLACE 的坑（REPLACE=先删后插违反铁律）等
+- 质检：单测 15/15 ✅；全量 5套件 52/52 ✅；tsc 27→27 ✅
 - 双推：`Gitee ✅` / `GitHub ✅`（API 直推）
