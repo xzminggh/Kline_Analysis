@@ -9,6 +9,27 @@
 
 ---
 
+## 2026-07-28 · `待推送` · **trae** · Stage 1 · 交易日历工具 (tradingCalendar)
+
+- **分支**: `trae`
+- **文件**:
+  - [src/utils/tradingCalendar.ts](file:///f:/trae%20solo/coze%20stock-screener%E8%81%94%E7%BD%91%E7%89%88/kline_-analysis/src/utils/tradingCalendar.ts) — 交易日历核心工具
+  - [src/utils/tradingCalendar.test.ts](file:///f:/trae%20solo/coze%20stock-screener%E8%81%94%E7%BD%91%E7%89%88/kline_-analysis/src/utils/tradingCalendar.test.ts) — 15 个单元测试
+- **功能**:
+  - `isTradingDay(date)` — 判断是否为 A 股交易日 (支持节假日 + 调休上班)
+  - `getLastTradingDay(date)` — 获取前一个交易日
+  - `getMissingTradingDays(start, end)` — 获取两个日期之间所有缺失交易日
+  - `updateHolidays()` — 支持外部注入自定义节假日表
+- **测试覆盖**: 工作日/周末/节假日/调休/Date对象输入/跨长假回退/配置更新
+- **质检结果**:
+  - 单元测试: 15/15 ✅
+  - 全量回归: 40/40 ✅ (无现有测试被破坏)
+  - 模块边界: ✅ (新增在 utils/, 未碰 db/UI/策略/指标)
+  - TS 编译: tradingCalendar.ts 无错误 ✅ (已有文件历史错误未引入)
+- **双推状态**: 待推送
+
+---
+
 ## 2026-07-28 · `c9680f4` · **trae** · docs(init) · Trae AI 开发分支初始化
 
 - **分支**: `trae` (从 master 切出,用于 AI 辅助开发)
