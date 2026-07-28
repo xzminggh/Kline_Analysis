@@ -12,6 +12,7 @@
 | 4 | lessons_learned_loop_constructor_fill.md | loop-constructor | K线增量补齐循环工程设计: 5阶段STAGED + 三源降级 + 模块边界管理 + D0-D6决策 | 2026-07-28 |
 | 5 | lessons_learned_stage1_tradingCalendar.md | Stage 1 | tradingCalendar: 可更新节假日配置 + 调休上班日优先级 + 左闭右开区间边界 | 2026-07-28 |
 | 6 | lessons_learned_stage2_quoteFetcher.md | Stage 2 | QuoteFetcher: 三源降级拉取 + 东财请求头修复 + 模块边界管理 + Mock/真实网络测试 | 2026-07-28 |
+| 7 | lessons_learned_stage3_klineFiller.md | Stage 3 | KlineFiller+FillCache: 补齐编排层 + LRU缓存 + 并发控制 + 熔断机制 | 2026-07-28 |
 
 ## 使用方式
 - 新的经验文件命名为 `lessons_learned_<stage>_<topic>.md`
