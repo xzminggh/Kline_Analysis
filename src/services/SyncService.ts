@@ -219,9 +219,9 @@ export async function runFullSync(
     const batchResults = await Promise.all(
       batch.map(async (cursor): Promise<StockSyncResult> => {
         try {
-          // [wb修改] 自动探测复权模式：先尝试 qfq（前复权），若校验失败则用 raw（不复权）重试一次
-          // 适配用户 DB 可能是前复权或不复权两种格式，无需手动配置
-          const ADJUST_MODES: AdjustMode[] = ['qfq', 'raw'];
+          // [wb修改] 自动探测复权模式：先尝试 raw（不复权，匹配大多数 DB），若校验失败则用 qfq（前复权）重试一次
+          // 适配用户 DB 可能是不复权或前复权两种格式，无需手动配置
+          const ADJUST_MODES: AdjustMode[] = ['raw', 'qfq'];
           let lastRejectError: string | undefined;
 
           for (const mode of ADJUST_MODES) {

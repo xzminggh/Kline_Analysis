@@ -7,7 +7,7 @@
  *   ③ 东方财富 push2his.eastmoney.com（fqt=1 前复权 / fqt=0 不复权）
  *
  * 铁律：
- *  - 默认前复权 qfq 基准，与本地 db 对齐；可切换 raw 模式适配不复权 DB
+ *  - 默认不复权 raw 基准（与本地 db 对齐，db 存储的是原始收盘价）；可切换 qfq 模式适配前复权 DB
  *  - 单源请求超时 8s，失败即降级下一源
  *  - 三源全挂抛 AllSourcesFailedError，由调用方跳过该股并记错（不中断整批）
  *
@@ -79,7 +79,7 @@ export function toMarketSymbol(code: string): { prefix: 'sh' | 'sz' | 'bj'; symb
 // URL 构造（导出便于单测断言）
 // ---------------------------------------------------------------------------
 
-export function buildTencentUrl(code: string, days: number, mode: AdjustMode = 'qfq'): string {
+export function buildTencentUrl(code: string, days: number, mode: AdjustMode = 'raw'): string {
   const { symbol } = toMarketSymbol(code);
   // 腾讯：末位参数 qfq=前复权，省略或空=不复权(raw)
   const qfqParam = mode === 'qfq' ? 'qfq' : '';
@@ -92,7 +92,7 @@ export function buildSinaUrl(code: string, days: number): string {
 }
 
 /** 东财 secid：sh→1.code，其余（sz/bj）→0.code；lmt 不生效须用 beg/end */
-export function buildEastmoneyUrl(code: string, days: number, mode: AdjustMode = 'qfq', now: Date = new Date()): string {
+export function buildEastmoneyUrl(code: string, days: number, mode: AdjustMode = 'raw', now: Date = new Date()): string {
   const { prefix } = toMarketSymbol(code);
   const secid = `${prefix === 'sh' ? 1 : 0}.${code.trim()}`;
   // 往前多取一倍日历日覆盖节假日，确保拿满 days 个交易日
@@ -261,14 +261,14 @@ const SOURCE_IMPL: Record<
  * 抓取单只股票最近 N 天日K，按 SOURCE_PRIORITY 三源降级。
  * 返回按日期升序、去重后的 bars。
  *
- * @param mode 复权模式：'qfq'=前复权（默认），'raw'=不复权
+ * @param mode 复权模式：'raw'=不复权（默认，匹配大多数 DB），'qfq'=前复权
  * @throws AllSourcesFailedError 三源全部失败时
  */
 export async function fetchDailyKline(
   code: string,
   days: number = DEFAULT_FETCH_DAYS,
   fetchImpl: FetchLike = fetch as unknown as FetchLike,
-  mode: AdjustMode = 'qfq'
+  mode: AdjustMode = 'raw'
 ): Promise<FetchResult> {
   const errors: SourceFetchError[] = [];
   for (const source of SOURCE_PRIORITY) {

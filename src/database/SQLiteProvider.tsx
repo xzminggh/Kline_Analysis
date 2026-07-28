@@ -99,7 +99,7 @@ export const SQLiteProvider: React.FC<{ children: ReactNode }> = ({ children }) 
   }, []);
 
   const getTables = async (): Promise<string[]> => {
-    if (!db) return [];
+    if (!db || !isConnected) return [];
     try {
       const rows = await db.getAllAsync<{ name: string }>(
         "SELECT name FROM sqlite_master WHERE type='table'"
