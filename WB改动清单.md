@@ -16,7 +16,7 @@
 | S3 diff_patch | 2026-07-28 | 比对+仅INSERT补齐实现+15单测（含无UPDATE/DELETE硬断言） | Gitee ✅ / GitHub ✅(API直推) |
 | S4 ui | 2026-07-28 | 一键补齐面板(自包含)+进度+摘要；补齐仓库缺失的 .eslintrc.js | Gitee ✅ / GitHub ✅(API直推) |
 | S5 background | 2026-07-28 | 后台定时补齐+仅WiFi守卫+首次手动授权；SyncPanel增后台开关；+expo-network依赖 | Gitee ✅ / GitHub ✅(API直推) |
-| S6 integration | 待办 | 全量测试+数据完整性断言 | 待办 |
+| S6 integration | 2026-07-28 | verify_sync三断言落地(node:sqlite)、全量质检通过、maker_checker铁律复核 | 待推 |
 
 ## 详细记录
 
@@ -67,3 +67,11 @@
 - **[wb修改]** 新增 `经验落盘/lessons_learned_stage5_background.md`：枚举名 `BackgroundFetchResult`(非Result)、原生模块动态import守测试隔离等
 - 质检：tsc 27→27 ✅（WB 零错）；eslint `.` exit 0/0错误（WB 三文件零 warning）；全量 jest 6 套件 **65/65** ✅（S5 +13，S1–S4 无回归）
 - 双推：`Gitee ✅`（commit `a628d96`）/ `GitHub ✅`（API 直推 commit `4dfb4e9`，远程 head 原 `102982e`）
+
+### S6 integration（2026-07-28）
+- **[wb修改]** 落地 `scripts/verify_sync.js` 三大断言（S1 骨架→真实实现）：① 无重复主键 ② 日期连续(工作日历) ③ 缺失bar=0；用 Node22 内置 `node:sqlite`（零新依赖）
+- 默认模式：合成「补齐前缺口态」库→INSERT OR IGNORE 模拟补齐→三大断言全过(exit0)；`--selftest` 造重复PK/日期空洞/缺失尾部三类坏库，断言全命中(exit0)→ 证明非只数行数
+- 集成门控：`npx jest` **65/65 ✅**；`npx tsc` 27 个错误全历史遗留(WB 零新增, 基线27→27)；`node scripts/verify_sync.js` exit0 ✅；`npx eslint .` exit0/0错误(14历史warning)
+- **[wb修改]** 新增 `经验落盘/lessons_learned_stage6_integration.md`：node:sqlite用法/dup-PK用例特殊处理/铁律复核
+- maker_checker 复核：OverviewScreen 仅+4行接入；全仓库+2088/-57(源码全新增, 锁文件合理更新)；kline_daily 仅INSERT OR IGNORE 由 SyncService.test 硬断言机器验证；S1–S5 双推完整
+- 双推：本地已就绪，待提交后 Gitee + GitHub 两端推送（见下方提交记录）
