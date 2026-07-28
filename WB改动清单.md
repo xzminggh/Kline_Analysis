@@ -16,7 +16,7 @@
 | S3 diff_patch | 2026-07-28 | 比对+仅INSERT补齐实现+15单测（含无UPDATE/DELETE硬断言） | Gitee ✅ / GitHub ✅(API直推) |
 | S4 ui | 2026-07-28 | 一键补齐面板(自包含)+进度+摘要；补齐仓库缺失的 .eslintrc.js | Gitee ✅ / GitHub ✅(API直推) |
 | S5 background | 2026-07-28 | 后台定时补齐+仅WiFi守卫+首次手动授权；SyncPanel增后台开关；+expo-network依赖 | Gitee ✅ / GitHub ✅(API直推) |
-| S6 integration | 2026-07-28 | verify_sync三断言落地(node:sqlite)、全量质检通过、maker_checker铁律复核 | 待推 |
+| S6 integration | 2026-07-28 | verify_sync三断言落地(node:sqlite)、全量质检通过、maker_checker铁律复核 | Gitee ✅ / GitHub ✅(API直推) |
 
 ## 详细记录
 
@@ -74,4 +74,4 @@
 - 集成门控：`npx jest` **65/65 ✅**；`npx tsc` 27 个错误全历史遗留(WB 零新增, 基线27→27)；`node scripts/verify_sync.js` exit0 ✅；`npx eslint .` exit0/0错误(14历史warning)
 - **[wb修改]** 新增 `经验落盘/lessons_learned_stage6_integration.md`：node:sqlite用法/dup-PK用例特殊处理/铁律复核
 - maker_checker 复核：OverviewScreen 仅+4行接入；全仓库+2088/-57(源码全新增, 锁文件合理更新)；kline_daily 仅INSERT OR IGNORE 由 SyncService.test 硬断言机器验证；S1–S5 双推完整
-- 双推：本地已就绪，待提交后 Gitee + GitHub 两端推送（见下方提交记录）
+- 双推：`Gitee ✅`（commit `d05e20c`）/ `GitHub ✅`（API 直推 commit `8bdc759`，远程 head 原 `7c3ce61`）
