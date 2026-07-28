@@ -1,0 +1,134 @@
+{
+  "task": "为离线K线App增加联网获取最新K线并与本地db对比、手机端实时补齐的闭环（三源降级，前复权，全量，仅WiFi，后台定时）",
+  "loop_altitude": "medium",
+  "loop_altitude_rationale": "单体开发、顺序门控阶段、单 agent；爆炸半径中等（仅新增模块+向用户db INSERT新行），可逆性高（git+导入自动备份），阶段间有依赖无独立扇出",
+  "selection_log": [
+    {"decision": "D0", "answer": "loop", "why": "可机器判定：对每只股票断言 MAX(local date) 覆盖至最新交易日且无缺失bar，SQL/断言可跑"},
+    {"decision": "D1", "answer": "staged (5 seams)", "why": "KlineFetcher(可独立测)→diff/patch(依赖fetcher+db)→UI(依赖sync服务)→background(依赖sync服务)→集成质检，每层交稳定可校验产物"},
+    {"decision": "D2", "answer": "plan_execute_verify + 末段 review", "why": "各阶段方案明确但需中途中止校正（复权不一致/三源全挂）；集成段为正确性审查"},
+    {"decision": "D3", "answer": "on_the_loop", "why": "爆炸半径中×可逆性高×反馈质量好(测试可抓坏)；仅在门控处人工复核，不每轮介入"},
+    {"decision": "D4", "answer": "medium", "why": "阶段间有依赖（diff依赖fetcher、UI/background依赖sync），无独立扇出"},
+    {"decision": "D5", "answer": "每阶段max_iterations≤8 + on_failure escalate；外层max_iterations 4 + 失败分支", "why": "受控重试+失败升级+复权不一致整体中止"},
+    {"decision": "D6", "answer": "completeness_first", "why": "App需整体连贯，检查(tsc/test)成本中等，每阶段做完整再校验；低cap、plan_execute_verify、集成跑全量测试"}
+  ],
+  "stages": [
+    {
+      "id": "scaffold",
+      "definition_of_done": {"goal": "新增 src/services/KlineFetcher.ts、src/services/SyncService.ts、scripts/verify_sync.js、WB改动清单.md，且 npx tsc --noEmit 通过", "machine_verifiable": true},
+      "loop_pattern": "plan_execute_verify",
+      "feedback_signal": {
+        "check": "cd kline_-analysis && npx tsc --noEmit",
+        "expect": "pass",
+        "falsifiable_when": "若 KlineFetcher.ts/SyncService.ts 有类型错误或引入未定义符号，tsc 退出非0",
+        "passing_but_wrong": "tsc 通过但模块未真正实现抓取/补齐逻辑（仅空壳）——需后续单测把关"
+      },
+      "stop_conditions": {
+        "failure": ["tsc 持续报错超过重试上限"],
+        "max_iterations": 8,
+        "on_failure": {"action": "escalate"}
+      },
+      "depends_on": []
+    },
+    {
+      "id": "fetcher",
+      "definition_of_done": {"goal": "KlineFetcher 三源降级(腾讯→新浪→东财)可解析日K，且 fallback 顺序正确", "machine_verifiable": true},
+      "loop_pattern": "plan_execute_verify",
+      "feedback_signal": {
+        "check": "cd kline_-analysis && npx jest src/services/KlineFetcher.test.ts",
+        "expect": "pass",
+        "falsifiable_when": "若某源解析错误或 fallback 顺序错（如东财先于腾讯），对应断言失败",
+        "passing_but_wrong": "测试只断言‘返回非空’而未断言来源优先级与字段映射，可能放过错源"
+      },
+      "stop_conditions": {
+        "failure": ["单测持续失败超过上限"],
+        "max_iterations": 8,
+        "on_failure": {"action": "escalate"}
+      },
+      "depends_on": ["scaffold"]
+    },
+    {
+      "id": "diff_patch",
+      "definition_of_done": {"goal": "对本地kline_daily按(code,date)比对，仅INSERT缺失bar且不复权/不改历史", "machine_verifiable": true},
+      "loop_pattern": "plan_execute_verify",
+      "feedback_signal": {
+        "check": "cd kline_-analysis && npx jest src/services/SyncService.test.ts",
+        "expect": "pass",
+        "falsifiable_when": "若实现改写了已有行或漏插缺失bar，断言(本地行数仅增、无UPDATE、缺失bar存在)失败",
+        "passing_but_wrong": "测试未校验复权基准一致性，可能接受尺度错乱的INSERT"
+      },
+      "stop_conditions": {
+        "failure": ["单测持续失败超过上限"],
+        "max_iterations": 8,
+        "on_failure": {"action": "escalate"}
+      },
+      "depends_on": ["fetcher"]
+    },
+    {
+      "id": "ui",
+      "definition_of_done": {"goal": "Overview/设置页新增‘一键补齐’按钮+进度+补齐摘要，tsc与eslint通过", "machine_verifiable": true},
+      "loop_pattern": "plan_execute_verify",
+      "feedback_signal": {
+        "check": "cd kline_-analysis && npx tsc --noEmit && npx eslint . --ext .ts,.tsx",
+        "expect": "pass",
+        "falsifiable_when": "若新增组件有类型错误或lint违规，tsc/eslint退出非0",
+        "passing_but_wrong": "编译通过但按钮未真正调用SyncService——需集成测试把关"
+      },
+      "stop_conditions": {
+        "failure": ["tsc/lint持续失败超过上限"],
+        "max_iterations": 8,
+        "on_failure": {"action": "escalate"}
+      },
+      "depends_on": ["diff_patch"]
+    },
+    {
+      "id": "background",
+      "definition_of_done": {"goal": "expo-background-fetch注册定时补齐任务，含仅WiFi守卫与首次手动授权", "machine_verifiable": true},
+      "loop_pattern": "plan_execute_verify",
+      "feedback_signal": {
+        "check": "cd kline_-analysis && npx tsc --noEmit && npx jest src/services/BackgroundSync.test.ts",
+        "expect": "pass",
+        "falsifiable_when": "若任务未注册或WiFi守卫逻辑反了，类型/断言失败",
+        "passing_but_wrong": "注册存在但未校验仅在WiFi下执行"
+      },
+      "stop_conditions": {
+        "failure": ["tsc/单测持续失败超过上限"],
+        "max_iterations": 8,
+        "on_failure": {"action": "escalate"}
+      },
+      "depends_on": ["diff_patch"]
+    },
+    {
+      "id": "integration_gate",
+      "definition_of_done": {"goal": "全量测试+类型+lint通过，且对样例db断言补齐后无重复主键、日期连续、缺失bar为0", "machine_verifiable": true},
+      "loop_pattern": "review",
+      "feedback_signal": {
+        "check": "cd kline_-analysis && npx jest && npx tsc --noEmit && node scripts/verify_sync.js",
+        "expect": "pass",
+        "falsifiable_when": "若样例db补齐后出现重复主键或仍有缺失bar，verify_sync.js断言失败",
+        "passing_but_wrong": "全量测试绿但verify_sync仅查行数未查日期连续性"
+      },
+      "stop_conditions": {
+        "failure": ["集成验证持续失败超过上限"],
+        "max_iterations": 4,
+        "on_failure": {"action": "escalate"}
+      },
+      "depends_on": ["ui", "background"]
+    }
+  ],
+  "human_placement": "on_the_loop",
+  "maker_checker": {"separate_checker": true, "scope": "正确性(仅INSERT新行/不复权/复权对齐)与需求覆盖(三源降级/全量/仅WiFi/后台定时)"},
+  "harness_primitives": ["expo-sqlite", "fetch", "expo-background-fetch", "jest-expo", "tsc", "eslint"],
+  "stop_conditions": {
+    "success": "db内每只股票kline_daily覆盖至最新交易日，缺失bar=0，全量测试/lint/类型通过，且无重复主键/日期断点",
+    "failure": ["复权基准与db不一致→整批中止", "三源全挂的股票被跳过并记错", "连续3轮失败→暂停诊断"],
+    "escalate": ["复权基准不一致", "连续3轮失败"],
+    "max_iterations": 4
+  },
+  "risk_guards": [
+    {"risk": "奖励黑客/测试过拟合", "mitigation": "单测断言结果(行数增量、无UPDATE、来源优先级)而非代理(token)"},
+    {"risk": "错误放大(某源坏响应污染)", "mitigation": "解析前校验schema，失败即切下一源"},
+    {"risk": "权限爆炸半径(写用户db)", "mitigation": "INSERT-only不变量+导入即备份旧库"},
+    {"risk": "复权尺度错乱", "mitigation": "batch级复权基准校验，不一致整体拒绝"},
+    {"risk": "上下文漂移/令牌膨胀", "mitigation": "阶段化提交，每阶段独立可校验产物"}
+  ]
+}
