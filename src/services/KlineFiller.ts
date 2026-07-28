@@ -263,10 +263,10 @@ export class KlineFiller {
    */
   private async getLastKlineDate(db: any, code: string): Promise<string | null> {
     try {
-      const row = await db.getFirstAsync<{ maxDate: string }>(
+      const row = await db.getFirstAsync(
         'SELECT MAX(date) as maxDate FROM kline_daily WHERE code = ?',
         [code]
-      );
+      ) as { maxDate: string } | null;
       return row?.maxDate || null;
     } catch (error) {
       console.error('getLastKlineDate failed:', error);

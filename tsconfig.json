@@ -1,4 +1,4 @@
-﻿{
+{
   "compilerOptions": {
     "target": "ESNext",
     "useDefineForClassFields": true,
@@ -19,7 +19,7 @@
     "paths": {
       "@/*": ["src/*"]
     },
-    "types": ["react-native", "@types/jest"],
+    "types": ["react-native", "@types/jest", "node"],
     "ignoreDeprecations": "6.0"
   },
   "include": ["src/**/*", "index.js"],

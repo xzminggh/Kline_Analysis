@@ -87,7 +87,7 @@ export default function KlineChart({
     const lows = visibleData.map(d => d.low);
     const volumes = visibleData.map(d => d.volume);
 
-    let allPrices = [...highs, ...lows];
+    let allPrices: (number | null)[] = [...highs, ...lows];
 
     const ma5 = showMA5 ? calculateMA(closes, 5) : [];
     const ma10 = showMA10 ? calculateMA(closes, 10) : [];
@@ -99,11 +99,11 @@ export default function KlineChart({
       allPrices = [...allPrices, ...boll.upper, ...boll.lower];
     }
 
-    if (ma5.length > 0) allPrices = [...allPrices, ...ma5.filter(v => v > 0)];
-    if (ma10.length > 0) allPrices = [...allPrices, ...ma10.filter(v => v > 0)];
-    if (ma20.length > 0) allPrices = [...allPrices, ...ma20.filter(v => v > 0)];
+    if (ma5.length > 0) allPrices = [...allPrices, ...ma5.filter((v): v is number => v !== null && v > 0)];
+    if (ma10.length > 0) allPrices = [...allPrices, ...ma10.filter((v): v is number => v !== null && v > 0)];
+    if (ma20.length > 0) allPrices = [...allPrices, ...ma20.filter((v): v is number => v !== null && v > 0)];
 
-    const positivePrices = allPrices.filter(v => v > 0);
+    const positivePrices = allPrices.filter((v): v is number => v !== null && v > 0);
     if (positivePrices.length === 0) {
       return { priceMin: 0, priceMax: 0, volumeMax: 0, ma5, ma10, ma20, boll, candleWidth: 0, gap: 0 };
     }
@@ -276,13 +276,14 @@ export default function KlineChart({
     });
   };
 
-  const renderMALine = (lineData: number[], color: string) => {
+  const renderMALine = (lineData: (number | null)[], color: string) => {
     if (lineData.length === 0) return null;
     const points: string[] = [];
     for (let i = 0; i < lineData.length; i++) {
-      if (lineData[i] > 0 && lineData[i] >= priceMin && lineData[i] <= priceMax) {
+      const value = lineData[i];
+      if (value !== null && value > 0 && value >= priceMin && value <= priceMax) {
         const x = indexToX(i);
-        const y = priceToY(lineData[i]);
+        const y = priceToY(value);
         if (points.length === 0) {
           points.push(`M${x},${y}`);
         } else {
@@ -301,11 +302,14 @@ export default function KlineChart({
     const lowerPoints: string[] = [];
 
     for (let i = 0; i < boll.middle.length; i++) {
-      if (boll.middle[i] > 0) {
+      const upperValue = boll.upper[i];
+      const middleValue = boll.middle[i];
+      const lowerValue = boll.lower[i];
+      if (upperValue !== null && middleValue !== null && lowerValue !== null && middleValue > 0) {
         const x = indexToX(i);
-        const upperY = priceToY(boll.upper[i]);
-        const middleY = priceToY(boll.middle[i]);
-        const lowerY = priceToY(boll.lower[i]);
+        const upperY = priceToY(upperValue);
+        const middleY = priceToY(middleValue);
+        const lowerY = priceToY(lowerValue);
         if (upperPoints.length === 0) {
           upperPoints.push(`M${x},${upperY}`);
           middlePoints.push(`M${x},${middleY}`);

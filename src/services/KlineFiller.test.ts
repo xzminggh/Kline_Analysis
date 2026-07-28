@@ -73,7 +73,13 @@ describe('KlineFiller', () => {
     // 固定日期为 2026-07-28
     global.Date = class extends originalDate {
       constructor(...args: any[]) {
-        super(...(args.length ? args : ['2026-07-28T00:00:00']));
+        if (args.length === 0) {
+          super('2026-07-28T00:00:00');
+        } else if (args.length === 1) {
+          super(args[0]);
+        } else {
+          super(args[0], args[1], args[2], args[3], args[4], args[5], args[6]);
+        }
       }
     } as any;
   });
