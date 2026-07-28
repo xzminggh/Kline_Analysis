@@ -12,9 +12,9 @@
  *  - 三源全挂抛 AllSourcesFailedError，由调用方跳过该股并记错（不中断整批）
  *
  * 归一化口径（2026-07-28 沙箱实测校准）：
- *  - volume 统一为「手」：腾讯原生手；新浪返回股 ÷100；东财原生手
+ *  - volume 统一为「万股」：腾讯原生手 ÷100；新浪返回股 ÷10000；东财原生手 ÷100
  *  - amount 统一为「元」：仅东财提供（f57），腾讯/新浪无 → 置 0
- *    （本地单位若与此不一致，由 S3 diff 阶段用重叠 bar 自动检测倍率校准）
+ *    （本地 kline_daily.volume 单位为「万股」，本模块已按此统一，补齐写入即匹配）
  *  - 东财实测：lmt 参数不生效，必须用 beg/end（YYYYMMDD）
  *  - 字段序：腾讯 [date,open,close,high,low,volume]；东财 CSV date,open,close,high,low,volume,amount
  */
@@ -132,7 +132,7 @@ function isValidBar(b: KlineDaily): boolean {
 }
 
 /**
- * 腾讯：data[symbol].qfqday（前复权）或 day（不复权），元素 [date, open, close, high, low, volume(手), ...]
+ * 腾讯：data[symbol].qfqday（前复权）或 day（不复权），元素 [date, open, close, high, low, volume(手，归一化为万股), ...]
  * 注意字段序是 open,close,high,low —— 和常见 OHLC 不同！
  * @param mode qfq 时优先读 qfqday 字段，raw 时读 day 字段
  */
@@ -159,7 +159,7 @@ export function parseTencent(payload: unknown, code: string, mode: AdjustMode = 
       close: num(r[2]),
       high: num(r[3]),
       low: num(r[4]),
-      volume: Math.round(num(r[5])), // 腾讯原生「手」
+      volume: Math.round(num(r[5]) / 100), // 腾讯原生「手」→ 万股（÷100）
       amount: 0, // 腾讯日K不含成交额
     }))
     .filter(isValidBar);
@@ -168,7 +168,7 @@ export function parseTencent(payload: unknown, code: string, mode: AdjustMode = 
 }
 
 /**
- * 新浪：数组 [{day, open, high, low, close, volume(股)}]，volume ÷100 → 手
+ * 新浪：数组 [{day, open, high, low, close, volume(股，归一化为万股)}]，volume ÷10000 → 万股
  */
 export function parseSina(payload: unknown, code: string): KlineDaily[] {
   if (!Array.isArray(payload)) throw new SourceFetchError('sina', '响应非数组');
@@ -180,7 +180,7 @@ export function parseSina(payload: unknown, code: string): KlineDaily[] {
       high: num(r.high),
       low: num(r.low),
       close: num(r.close),
-      volume: Math.round(num(r.volume) / 100), // 新浪「股」→「手」
+      volume: Math.round(num(r.volume) / 10000), // 新浪「股」→「万股」（÷10000）
       amount: 0, // 新浪日K不含成交额
     }))
     .filter(isValidBar);
@@ -189,7 +189,7 @@ export function parseSina(payload: unknown, code: string): KlineDaily[] {
 }
 
 /**
- * 东财：data.klines[] CSV "date,open,close,high,low,volume(手),amount(元),..."
+ * 东财：data.klines[] CSV "date,open,close,high,low,volume(手→万股),amount(元),..."
  */
 export function parseEastmoney(payload: unknown, code: string): KlineDaily[] {
   const root = payload as { rc?: number; data?: { klines?: unknown[] } };
@@ -206,7 +206,7 @@ export function parseEastmoney(payload: unknown, code: string): KlineDaily[] {
         close: num(p[2]),
         high: num(p[3]),
         low: num(p[4]),
-        volume: Math.round(num(p[5])), // 东财原生「手」
+        volume: Math.round(num(p[5]) / 100), // 东财原生「手」→ 万股（÷100）
         amount: Math.round(num(p[6])), // 东财「元」
       };
     })
