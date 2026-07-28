@@ -15,6 +15,7 @@ import {
   registerBackgroundSync,
   unregisterBackgroundSync,
   isBackgroundSyncEnabled,
+  isBackgroundFetchAvailable,
   enableBackgroundSync,
   type NetworkType,
 } from './BackgroundSync';
@@ -30,7 +31,9 @@ function makeFakeBackgroundFetch() {
     (state as { registered: boolean }).registered = false;
     return Promise.resolve();
   });
-  return { BackgroundFetchResult, registerTaskAsync, unregisterTaskAsync };
+  // [wb修改] isBackgroundFetchAvailable 内部调用 getStatusAsync 检测平台能力
+  const getStatusAsync = jest.fn().mockResolvedValue({ status: 'available' });
+  return { BackgroundFetchResult, registerTaskAsync, unregisterTaskAsync, getStatusAsync };
 }
 
 const state = { registered: false };
@@ -158,6 +161,7 @@ describe('注册 / 授权 / 幂等', () => {
     state.registered = false;
     fakeBf.registerTaskAsync.mockClear();
     fakeBf.unregisterTaskAsync.mockClear();
+    fakeBf.getStatusAsync.mockClear().mockResolvedValue({ status: 'available' });
     fakeTm.isTaskRegisteredAsync.mockClear();
   });
 
@@ -187,5 +191,18 @@ describe('注册 / 授权 / 幂等', () => {
     await unregisterBackgroundSync({ taskManager: fakeTm, backgroundFetch: fakeBf });
     expect(fakeBf.unregisterTaskAsync).toHaveBeenCalledWith(BACKGROUND_SYNC_TASK);
     expect(await isBackgroundSyncEnabled({ taskManager: fakeTm })).toBe(false);
+  });
+
+  it('平台不支持时 registerBackgroundSync 返回 false 且不调用 registerTaskAsync', async () => {
+    // [wb修改] 模拟 Expo Go：getStatusAsync 抛异常 → isBackgroundFetchAvailable 返回 false
+    fakeBf.getStatusAsync.mockRejectedValue(new Error('not available'));
+    const ok = await registerBackgroundSync({ taskManager: fakeTm, backgroundFetch: fakeBf });
+    expect(ok).toBe(false);
+    expect(fakeBf.registerTaskAsync).not.toHaveBeenCalled();
+  });
+
+  it('isBackgroundFetchAvailable 正常返回 true', async () => {
+    expect(await isBackgroundFetchAvailable({ backgroundFetch: fakeBf })).toBe(true);
+    expect(fakeBf.getStatusAsync).toHaveBeenCalledTimes(1);
   });
 });

@@ -28,7 +28,7 @@ export interface SyncCursor {
 /** 单只股票的补齐结果 */
 export interface StockSyncResult {
   code: string;
-  status: 'patched' | 'up_to_date' | 'failed' | 'rejected';
+  status: 'patched' | 'up_to_date' | 'failed' | 'rejected' | 'skipped';
   insertedBars: number;
   source?: string;
   error?: string;
@@ -42,6 +42,7 @@ export interface SyncSummary {
   patchedStocks: number;
   insertedBars: number;
   failedStocks: number;
+  skippedStocks: number; // [wb修改] 指数类代码跳过数
   rejected: boolean; // 有股票因复权基准不一致被拒绝
   errors: Array<{ code: string; error: string }>;
 }
@@ -61,6 +62,16 @@ export const ADJUST_BASIS_MIN_OVERLAP = 3;
 
 /** 抓取分批大小（并发受控，不压垮手机/接口） */
 export const FETCH_BATCH_SIZE = 5;
+
+/**
+ * 指数类代码（大盘指数无复权概念，qfq 接口返回的价格与 db 原始价格必然不一致，
+ * checkAdjustBasis 会正确拒绝。直接跳过，不浪费网络请求与报错干扰用户）。
+ */
+export const INDEX_CODES: ReadonlySet<string> = new Set([
+  '000001', // 上证指数
+  '399001', // 深证成指
+  '399006', // 创业板指
+]);
 
 // ---------------------------------------------------------------------------
 // prepare：读游标
@@ -192,8 +203,19 @@ export async function runFullSync(
   const results: StockSyncResult[] = [];
   let done = 0;
 
-  for (let i = 0; i < cursors.length; i += batchSize) {
-    const batch = cursors.slice(i, i + batchSize);
+  // 跳过指数类代码（无复权概念，qfq 数据与 db 原始价格必然不一致）
+  const stockCursors = cursors.filter((c) => {
+    if (INDEX_CODES.has(c.code)) {
+      results.push({ code: c.code, status: 'skipped', insertedBars: 0 });
+      done += 1;
+      onProgress?.(done, cursors.length, c.code);
+      return false;
+    }
+    return true;
+  });
+
+  for (let i = 0; i < stockCursors.length; i += batchSize) {
+    const batch = stockCursors.slice(i, i + batchSize);
     const batchResults = await Promise.all(
       batch.map(async (cursor): Promise<StockSyncResult> => {
         try {
@@ -255,6 +277,7 @@ export async function runFullSync(
     patchedStocks: results.filter((r) => r.status === 'patched').length,
     insertedBars: results.reduce((s, r) => s + r.insertedBars, 0),
     failedStocks: results.filter((r) => r.status === 'failed').length,
+    skippedStocks: results.filter((r) => r.status === 'skipped').length,
     rejected: results.some((r) => r.status === 'rejected'),
     errors,
   };

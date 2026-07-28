@@ -16,6 +16,7 @@ import { runFullSync, type SyncSummary } from '../services/SyncService';
 import {
   enableBackgroundSync,
   isBackgroundSyncEnabled,
+  isBackgroundFetchAvailable,
   unregisterBackgroundSync,
 } from '../services/BackgroundSync';
 
@@ -31,13 +32,19 @@ export const SyncPanel: React.FC = () => {
   const [progress, setProgress] = useState<ProgressState | null>(null);
   const [summary, setSummary] = useState<SyncSummary | null>(null);
   const [bgEnabled, setBgEnabled] = useState(false);
+  const [bgAvailable, setBgAvailable] = useState(true); // [wb修改] Expo Go 等环境不支持后台任务
 
-  // 进入面板时读取后台补齐是否已授权
+  // 进入面板时读取后台补齐是否已授权 + 平台是否支持
   useEffect(() => {
     let alive = true;
     isBackgroundSyncEnabled()
       .then((on) => {
         if (alive) setBgEnabled(on);
+      })
+      .catch(() => undefined);
+    isBackgroundFetchAvailable()
+      .then((ok) => {
+        if (alive) setBgAvailable(ok);
       })
       .catch(() => undefined);
     return () => {
@@ -87,10 +94,22 @@ export const SyncPanel: React.FC = () => {
 
   // 首次手动授权：用户手势切换后台自动补齐（仅WiFi）；失败回滚开关
   const toggleBackground = useCallback(async (value: boolean) => {
+    if (value && !bgAvailable) {
+      Alert.alert(
+        '后台补齐不可用',
+        '当前环境（如 Expo Go）不支持原生后台任务。此功能需要开发版本(Development Build)或正式打包后才能使用。\n\n前台「一键补齐」功能不受影响。',
+        [{ text: '知道了' }]
+      );
+      return;
+    }
     setBgEnabled(value);
     try {
       if (value) {
-        await enableBackgroundSync();
+        const ok = await enableBackgroundSync();
+        if (!ok) {
+          setBgAvailable(false); // [wb修改] 注册返回 false = 平台不支持
+          setBgEnabled(false);
+        }
       } else {
         await unregisterBackgroundSync();
       }
@@ -98,7 +117,7 @@ export const SyncPanel: React.FC = () => {
       setBgEnabled(!value);
       Alert.alert('后台补齐设置失败', e instanceof Error ? e.message : String(e), [{ text: '确定' }]);
     }
-  }, []);
+  }, [bgAvailable]);
 
   const pct = progress && progress.total > 0 ? Math.round((progress.done / progress.total) * 100) : 0;
 
@@ -129,6 +148,11 @@ export const SyncPanel: React.FC = () => {
           trackColor={{ false: '#3a5068', true: '#0f3460' }}
         />
       </View>
+      {!bgAvailable && (
+        <Text style={styles.bgHint}>
+          当前环境不支持后台定时任务（需 Development Build 或正式包），前台补齐不受影响
+        </Text>
+      )}
 
       {syncing && progress && (
         <View style={styles.progressTrack}>
@@ -142,7 +166,8 @@ export const SyncPanel: React.FC = () => {
             补齐完成：补了 {summary.patchedStocks} 只 / {summary.insertedBars} 根
           </Text>
           <Text style={styles.summaryLine}>
-            共 {summary.totalStocks} 只 · 失败 {summary.failedStocks} 只
+            共 {summary.totalStocks} 只 · 补齐 {summary.patchedStocks} · 跳过 {summary.skippedStocks}（指数）
+            {summary.failedStocks > 0 ? ` · 失败 ${summary.failedStocks}` : ''}
             {summary.rejected ? ' · 有复权拒绝' : ''}
           </Text>
           {summary.errors.slice(0, 5).map((e) => (
@@ -195,6 +220,12 @@ const styles = StyleSheet.create({
   bgLabel: {
     color: '#e0e0e0',
     fontSize: 13,
+  },
+  bgHint: {
+    color: '#f59e0b',
+    fontSize: 11,
+    marginTop: 4,
+    lineHeight: 15,
   },
   progressTrack: {
     height: 6,

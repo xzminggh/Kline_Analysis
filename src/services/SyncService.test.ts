@@ -277,18 +277,19 @@ describe('runFullSync', () => {
 
   it('某股三源全挂 → 跳过记错，其他股照常补齐（不中断整批）', async () => {
     const db = new FakeDb();
-    db.seedStocks(['600000', '000001']);
-    db.seedKline([bar('000001', '2026-07-27', 11.0)]);
-    const online000001 = [bar('000001', '2026-07-27', 11.0), bar('000001', '2026-07-28', 11.1)];
+    // [wb修改] 000001 是指数(INDEX_CODES)，会被跳过；改用 600001 做补齐目标
+    db.seedStocks(['600000', '600001']);
+    db.seedKline([bar('600001', '2026-07-27', 11.0)]);
+    const online600001 = [bar('600001', '2026-07-27', 11.0), bar('600001', '2026-07-28', 11.1)];
     // 600000 三源全挂（mock 里没配它的数据也让腾讯 500）
     const f: FetchLike = async (url: string) => {
       if (url.includes('600000') || !url.includes('gtimg')) return { ok: false, status: 500, json: async () => ({}) };
-      return tencentFetchFor({ '000001': online000001 })(url);
+      return tencentFetchFor({ '600001': online600001 })(url);
     };
     const summary = await runFullSync(db.asDb(), undefined, { fetchImpl: f, now: AFTER_CLOSE });
     expect(summary.failedStocks).toBe(1);
-    expect(summary.patchedStocks).toBe(1); // 000001 照常补
-    expect(db.kline.get('000001|2026-07-28')).toBeDefined();
+    expect(summary.patchedStocks).toBe(1); // 600001 照常补
+    expect(db.kline.get('600001|2026-07-28')).toBeDefined();
     expect(summary.errors.some((e) => e.code === '600000')).toBe(true);
   });
 

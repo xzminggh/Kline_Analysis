@@ -138,18 +138,52 @@ export async function isBackgroundSyncEnabled(deps: BackgroundSyncDeps = {}): Pr
   return tm.isTaskRegisteredAsync(BACKGROUND_SYNC_TASK);
 }
 
-/** 注册后台定时任务（幂等：已注册直接返回 true） */
+/**
+ * 检测后台任务是否在当前平台可用。
+ * Expo Go 不支持 background-fetch / task-manager 原生模块，返回 false。
+ */
+export async function isBackgroundFetchAvailable(deps: BackgroundSyncDeps = {}): Promise<boolean> {
+  const bf = deps.backgroundFetch ?? BackgroundFetch;
+  try {
+    // [wb修改] Expo Go 调此方法会抛 "not available" 并 console.warn，
+    // 我们用 try/catch 吞掉异常 + 下面临时压制 warn，对用户完全静默
+    return await bf.getStatusAsync().then(() => true);
+  } catch {
+    return false;
+  }
+}
+
+/**
+ * 注册后台定时任务（幂等：已注册直接返回 true）。
+ * 平台不支持时（如 Expo Go）返回 false 且不抛异常/不弹警告。
+ */
 export async function registerBackgroundSync(deps: BackgroundSyncDeps = {}): Promise<boolean> {
   const tm = deps.taskManager ?? TaskManager;
   const bf = deps.backgroundFetch ?? BackgroundFetch;
+
+  // 已注册 → 幂等直接返回
   const registered = await tm.isTaskRegisteredAsync(BACKGROUND_SYNC_TASK);
   if (registered) return true;
-  await bf.registerTaskAsync(BACKGROUND_SYNC_TASK, {
-    minimumInterval: 60 * 60 * 24, // 每 24 小时至多一次
-    stopOnTerminate: false,
-    startOnBoot: true,
-  });
-  return true;
+
+  // 检测平台能力：Expo Go 等环境不支持原生后台任务
+  const available = await isBackgroundFetchAvailable(deps);
+  if (!available) return false;
+
+  // [wb修改] 临时压制 expo-background-fetch 的两个 console.warn：
+  //   1) "not available in Expo Go"（上面已拦截但防御性压制）
+  //   2) "deprecated, use expo-background-task instead"（信息性弃用通知，不阻塞功能）
+  const origWarn = console.warn;
+  console.warn = () => {}; // no-op
+  try {
+    await bf.registerTaskAsync(BACKGROUND_SYNC_TASK, {
+      minimumInterval: 60 * 60 * 24, // 每 24 小时至多一次
+      stopOnTerminate: false,
+      startOnBoot: true,
+    });
+    return true;
+  } finally {
+    console.warn = origWarn; // 恢复原始 warn
+  }
 }
 
 /** 取消注册后台任务 */
@@ -169,6 +203,9 @@ export async function enableBackgroundSync(deps: BackgroundSyncDeps = {}): Promi
 }
 
 // ---- 模块加载即定义任务（真机后台调度需要任务在 bundle 内已定义） ----
+// [wb修改] 压制 Expo Go / 弃用警告（defineTask 内部会调 registerTaskAsync 触发 warn）
+const _origWarn = console.warn;
+console.warn = () => {};
 try {
   TaskManager.defineTask(BACKGROUND_SYNC_TASK, async () => {
     return runBackgroundSyncHandler({
@@ -181,3 +218,4 @@ try {
 } catch {
   // 重复定义（HMR/测试环境）或平台不支持时忽略
 }
+console.warn = _origWarn;
