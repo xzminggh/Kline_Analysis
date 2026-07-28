@@ -56,7 +56,7 @@
 - **质检结果**:
   - TypeScript 编译: `npx tsc --noEmit` ✅
   - 单元测试: 73/73 ✅ (无回归)
-- **双推状态**: Gitee ⏳ / GitHub ⏳
+- **双推状态**: Gitee ✅ / GitHub ✅
 
 ---
 
