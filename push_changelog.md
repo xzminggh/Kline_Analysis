@@ -36,6 +36,38 @@
 
 ---
 
+## 2026-07-28 · `1d9b0f9` · **trae** · Stage 4 · 全量补齐 UI + TypeScript 全量修复
+
+- **分支**: `trae`
+- **文件**:
+  - [src/screens/OverviewScreen.tsx](file:///f:/trae%20solo/coze%20stock-screener联网版/kline_-analysis/src/screens/OverviewScreen.tsx) — 全量补齐 UI 入口
+  - [src/services/KlineFiller.ts](file:///f:/trae%20solo/coze%20stock-screener联网版/kline_-analysis/src/services/KlineFiller.ts) — fillBatch 进度回调与结果统计
+  - [src/indicators/Indicators.ts](file:///f:/trae%20solo/coze%20stock-screener联网版/kline_-analysis/src/indicators/Indicators.ts) — 指标返回类型修正
+  - [src/strategies/StrategyEngine.ts](file:///f:/trae%20solo/coze%20stock-screener联网版/kline_-analysis/src/strategies/StrategyEngine.ts) — 策略函数签名适配 nullable 指标
+  - [src/components/KlineChart.tsx](file:///f:/trae%20solo/coze%20stock-screener联网版/kline_-analysis/src/components/KlineChart.tsx) — K 线图 nullable 指标渲染
+  - [src/screens/StrategyScreen.tsx](file:///f:/trae%20solo/coze%20stock-screener联网版/kline_-analysis/src/screens/StrategyScreen.tsx) — 修复重复样式键
+- **功能**:
+  - OverviewScreen 新增「补齐最新 K 线」按钮，支持一键批量补齐
+  - 分批保护：超过 50 只股票时默认只处理前 50 只，并提示分批
+  - 实时进度条 + 当前股票代码提示
+  - 补齐完成后弹窗展示成功/失败/跳过数量，并刷新 K 线数据量
+  - 补齐过程中禁用分析运行按钮，避免并发操作
+- **TypeScript 修复**:
+  - 统一 calculateMA/RSI/Bollinger/ATR/CCI/MOM/ROC/BollingerWidth/Slope/Amplitude/findLocalExtrema 等函数返回 `(number | null)[]`
+  - StrategyEngine 所有策略函数适配 nullable 指标参数
+  - 删除未使用的 `ma20` 辅助函数，避免与变量名冲突
+  - 修复 StrategyScreen 中重复的 `resultHeader` 样式键
+  - KlineChart 渲染 MA/布林带时过滤 null 值
+- **测试覆盖**:
+  - KlineFiller 新增批量补齐进度回调 / 并发拒绝 / 熔断 / isFilling 状态等用例
+- **质检结果**:
+  - TypeScript 编译: `npx tsc --noEmit` ✅ 无错误
+  - 单元测试: 73/73 ✅ (无现有测试被破坏)
+  - 模块边界: ✅ (UI 层只调用 KlineFiller，不碰数据层)
+- **双推状态**: Gitee ⏳ / GitHub ⏳
+
+---
+
 ## 2026-07-28 · `d255972` · **trae** · Stage 3 · 补齐编排 + SQLite 增量写入 (KlineFiller + FillCache)
 
 - **分支**: `trae`
