@@ -9,7 +9,7 @@
 
 ---
 
-## 2026-07-28 · `待推送` · **trae** · Stage 1 · 交易日历工具 (tradingCalendar)
+## 2026-07-28 · `eaaaa7d` · **trae** · Stage 1 · 交易日历工具 (tradingCalendar)
 
 - **分支**: `trae`
 - **文件**:
@@ -26,7 +26,7 @@
   - 全量回归: 40/40 ✅ (无现有测试被破坏)
   - 模块边界: ✅ (新增在 utils/, 未碰 db/UI/策略/指标)
   - TS 编译: tradingCalendar.ts 无错误 ✅ (已有文件历史错误未引入)
-- **双推状态**: 待推送
+- **双推状态**: Gitee ✅ / GitHub ✅
 
 ---
 
