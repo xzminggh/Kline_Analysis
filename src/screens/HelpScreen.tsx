@@ -6,7 +6,7 @@ export default function HelpScreen() {
     <ScrollView style={styles.container} contentContainerStyle={styles.contentContainer}>
       <View style={styles.header}>
         <Text style={styles.appTitle}>K线策略筛选器</Text>
-        <Text style={styles.version}>版本号: v1.0.0</Text>
+        <Text style={styles.version}>正式联网版 · 版本号 v2.0.0</Text>
       </View>
 
       <View style={styles.warningSection}>
@@ -28,7 +28,7 @@ export default function HelpScreen() {
         <Text style={styles.bullet}>• 智能评分系统（1-5星评级）</Text>
         <Text style={styles.bullet}>• K线图支持单指拖动平移、双击重置</Text>
         <Text style={styles.bullet}>• 实时显示十字光标和数据面板</Text>
-        <Text style={styles.bullet}>• 一键导出完整分析报告为CSV格式</Text>
+        <Text style={styles.bullet}>• 一键生成完整分析报告并分享（支持 Top20 / 全量）</Text>
       </View>
 
       <View style={styles.section}>
@@ -197,6 +197,7 @@ export default function HelpScreen() {
         <Text style={styles.bullet}>• 筛选结果：按星级分页筛选（全部/5星/4星/3星/2星/1星），支持快速滚动查看</Text>
         <Text style={styles.bullet}>• 搜索过滤：按关键词、星级、信号类型、最低分数筛选，支持多种排序</Text>
         <Text style={styles.bullet}>• 点击股票条目跳转到详情页查看分析详情</Text>
+        <Text style={styles.bullet}>• 联网补齐：一键抓取最新日K并补齐本地缺失数据（见「联网与数据同步」）</Text>
       </View>
 
       <View style={styles.section}>
@@ -212,12 +213,12 @@ export default function HelpScreen() {
 
       <View style={styles.section}>
         <Text style={styles.sectionTitle}>策略页</Text>
-        <Text style={styles.bullet}>功能：策略配置 + 筛选结果导出</Text>
+        <Text style={styles.bullet}>功能：策略配置 + 筛选结果分享</Text>
         <Text style={styles.bullet}>• 策略开关：可单独启用/禁用每个策略</Text>
         <Text style={styles.bullet}>• 策略分类：按8大类别筛选查看策略</Text>
         <Text style={styles.bullet}>• 筛选结果：显示评分最高的20只股票</Text>
-        <Text style={styles.bullet}>• 报告导出：支持生成Top20报告或全部报告</Text>
-        <Text style={styles.bullet}>• 导出CSV：导出完整分析报告</Text>
+        <Text style={styles.bullet}>• 报告生成：支持生成 Top20 报告或全部报告（Markdown 格式）</Text>
+        <Text style={styles.bullet}>• 报告分享：一键分享完整分析报告到其他应用</Text>
       </View>
 
       <View style={styles.section}>
@@ -228,9 +229,17 @@ export default function HelpScreen() {
       </View>
 
       <View style={styles.section}>
+        <Text style={styles.sectionTitle}>联网与数据同步</Text>
+        <Text style={styles.bullet}>• 数据来源：行情通过联网实时抓取（腾讯财经 / 东方财富 / 新浪），缓存在本地 SQLite，离线也能查看</Text>
+        <Text style={styles.bullet}>• 一键补齐：在「概览页」点「一键补齐最新K线」，联网抓取并补齐本地缺失的日K数据</Text>
+        <Text style={styles.bullet}>• 补齐原则：只新增缺失K线，绝不修改已有历史数据；建议在 WiFi 环境下执行</Text>
+        <Text style={styles.bullet}>• 后台自动补齐：可开启「仅 WiFi 自动补齐」，需 Development Build 或正式打包环境</Text>
+        <Text style={styles.bullet}>• 当前环境提示：Expo Go 不支持原生后台任务，前台「一键补齐」不受影响</Text>
+      </View>
+
+      <View style={styles.section}>
         <Text style={styles.sectionTitle}>数据说明</Text>
-        <Text style={styles.bullet}>• 数据来源：使用本地 SQLite 数据库文件</Text>
-        <Text style={styles.bullet}>• 必须包含表：stocks、kline_daily、meta</Text>
+        <Text style={styles.bullet}>• 数据库表：必须包含 stocks、kline_daily、meta 三张表</Text>
         <Text style={styles.bullet}>• 至少需要100条K线数据才能进行策略分析</Text>
         <Text style={styles.bullet}>• 分析结果在内存中缓存，重新分析会清除缓存</Text>
       </View>

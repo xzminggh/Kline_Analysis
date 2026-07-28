@@ -181,7 +181,7 @@ export function generateAnalysisReport(results: AnalysisResult[], config: Report
   report += `# K线策略筛选器 分析报告\n\n`;
   report += `**分析日期**: ${date}\n`;
   report += `**数据源**: ${config.dbName}\n`;
-  report += `**策略引擎**: v1.0.0（${config.strategyCount}个策略全启用）\n`;
+  report += `**策略引擎**: v2.0.0（${config.strategyCount}个策略全启用）\n`;
   report += `**分析股票数**: ${sorted.length}只\n\n`;
   report += `> **这个软件只是帮助使用者筛选过去的k线指标，不代表未来趋势，投资有风险，入市需谨慎。**\n\n`;
   report += `---\n\n`;
@@ -329,7 +329,7 @@ export function generateAnalysisReport(results: AnalysisResult[], config: Report
   report += `5. 负分股票不代表"一定会跌"，但空头信号占优时，风险收益比不利。\n`;
   report += `6. 买卖决策请结合基本面、资金面、政策面综合判断。\n\n`;
   report += `---\n\n`;
-  report += `*报告生成时间：${date}* · *K线策略筛选器 v1.0.0* · *策略数量：${config.strategyCount}个*\n`;
+  report += `*报告生成时间：${date}* · *K线策略筛选器 正式联网版 v2.0.0* · *策略数量：${config.strategyCount}个*\n`;
 
   return report;
 }
