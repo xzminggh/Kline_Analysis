@@ -1,5 +1,5 @@
 /**
- * [wb修改] KlineFetcher — 联网K线抓取模块（三源降级）
+ * [wb修改] KlineFetcher — 联网K线抓取模块（三源降级）S2 实现
  *
  * 降级顺序（源自用户 stock-data-fetcher skill v2.0.0 规范）：
  *   ① 腾讯 web.ifzq.gtimg.cn（qfq 前复权）
@@ -11,7 +11,12 @@
  *  - 单源请求超时 8s，失败即降级下一源
  *  - 三源全挂抛 AllSourcesFailedError，由调用方跳过该股并记错（不中断整批）
  *
- * S1 阶段：骨架 + 类型 + 源配置。S2 阶段填充抓取与解析实现。
+ * 归一化口径（2026-07-28 沙箱实测校准）：
+ *  - volume 统一为「手」：腾讯原生手；新浪返回股 ÷100；东财原生手
+ *  - amount 统一为「元」：仅东财提供（f57），腾讯/新浪无 → 置 0
+ *    （本地单位若与此不一致，由 S3 diff 阶段用重叠 bar 自动检测倍率校准）
+ *  - 东财实测：lmt 参数不生效，必须用 beg/end（YYYYMMDD）
+ *  - 字段序：腾讯 [date,open,close,high,low,volume]；东财 CSV date,open,close,high,low,volume,amount
  */
 
 import type { KlineDaily } from '../database/SQLiteProvider';
@@ -67,24 +72,200 @@ export function toMarketSymbol(code: string): { prefix: 'sh' | 'sz' | 'bj'; symb
   return { prefix: 'sz', symbol: `sz${c}` };
 }
 
+// ---------------------------------------------------------------------------
+// URL 构造（导出便于单测断言）
+// ---------------------------------------------------------------------------
+
+export function buildTencentUrl(code: string, days: number): string {
+  const { symbol } = toMarketSymbol(code);
+  return `https://web.ifzq.gtimg.cn/appstock/app/fqkline/get?param=${symbol},day,,,${days},qfq`;
+}
+
+export function buildSinaUrl(code: string, days: number): string {
+  const { symbol } = toMarketSymbol(code);
+  return `https://money.finance.sina.com.cn/quotes_service/api/json_v2.php/CN_MarketData.getKLineData?symbol=${symbol}&scale=240&ma=no&datalen=${days}`;
+}
+
+/** 东财 secid：sh→1.code，其余（sz/bj）→0.code；lmt 不生效须用 beg/end */
+export function buildEastmoneyUrl(code: string, days: number, now: Date = new Date()): string {
+  const { prefix } = toMarketSymbol(code);
+  const secid = `${prefix === 'sh' ? 1 : 0}.${code.trim()}`;
+  // 往前多取一倍日历日覆盖节假日，确保拿满 days 个交易日
+  const begDate = new Date(now.getTime() - days * 2 * 86400000);
+  const y = begDate.getFullYear();
+  const m = String(begDate.getMonth() + 1).padStart(2, '0');
+  const d = String(begDate.getDate()).padStart(2, '0');
+  return (
+    `https://push2his.eastmoney.com/api/qt/stock/kline/get?secid=${secid}` +
+    `&klt=101&fqt=1&beg=${y}${m}${d}&end=20500101` +
+    `&fields1=f1,f2,f3,f4,f5,f6&fields2=f51,f52,f53,f54,f55,f56,f57`
+  );
+}
+
+// ---------------------------------------------------------------------------
+// 各源解析（纯函数，导出便于单测）
+// ---------------------------------------------------------------------------
+
+function num(v: unknown): number {
+  const n = typeof v === 'number' ? v : parseFloat(String(v));
+  return Number.isFinite(n) ? n : 0;
+}
+
+/** 校验一根 bar 的基本合理性（解析前置 schema 校验，坏数据即弃） */
+function isValidBar(b: KlineDaily): boolean {
+  return (
+    /^\d{4}-\d{2}-\d{2}$/.test(b.date) &&
+    b.open > 0 &&
+    b.high > 0 &&
+    b.low > 0 &&
+    b.close > 0 &&
+    b.high >= b.low &&
+    b.volume >= 0
+  );
+}
+
+/**
+ * 腾讯：data[symbol].qfqday（无则 day），元素 [date, open, close, high, low, volume(手), ...]
+ * 注意字段序是 open,close,high,low —— 和常见 OHLC 不同！
+ */
+export function parseTencent(payload: unknown, code: string): KlineDaily[] {
+  const { symbol } = toMarketSymbol(code);
+  const root = payload as { code?: number; data?: Record<string, { qfqday?: unknown[][]; day?: unknown[][] }> };
+  if (!root || root.code !== 0 || !root.data || !root.data[symbol]) {
+    throw new SourceFetchError('tencent', '响应结构不符');
+  }
+  const rows = root.data[symbol].qfqday ?? root.data[symbol].day;
+  if (!Array.isArray(rows)) throw new SourceFetchError('tencent', '无 qfqday/day 数组');
+  const bars = rows
+    .filter((r): r is unknown[] => Array.isArray(r) && r.length >= 6)
+    .map((r) => ({
+      code: code.trim(),
+      date: String(r[0]),
+      open: num(r[1]),
+      close: num(r[2]),
+      high: num(r[3]),
+      low: num(r[4]),
+      volume: Math.round(num(r[5])), // 腾讯原生「手」
+      amount: 0, // 腾讯日K不含成交额
+    }))
+    .filter(isValidBar);
+  if (bars.length === 0) throw new SourceFetchError('tencent', '解析后无有效bar');
+  return bars;
+}
+
+/**
+ * 新浪：数组 [{day, open, high, low, close, volume(股)}]，volume ÷100 → 手
+ */
+export function parseSina(payload: unknown, code: string): KlineDaily[] {
+  if (!Array.isArray(payload)) throw new SourceFetchError('sina', '响应非数组');
+  const bars = (payload as Array<Record<string, unknown>>)
+    .map((r) => ({
+      code: code.trim(),
+      date: String(r.day ?? ''),
+      open: num(r.open),
+      high: num(r.high),
+      low: num(r.low),
+      close: num(r.close),
+      volume: Math.round(num(r.volume) / 100), // 新浪「股」→「手」
+      amount: 0, // 新浪日K不含成交额
+    }))
+    .filter(isValidBar);
+  if (bars.length === 0) throw new SourceFetchError('sina', '解析后无有效bar');
+  return bars;
+}
+
+/**
+ * 东财：data.klines[] CSV "date,open,close,high,low,volume(手),amount(元),..."
+ */
+export function parseEastmoney(payload: unknown, code: string): KlineDaily[] {
+  const root = payload as { rc?: number; data?: { klines?: unknown[] } };
+  if (!root || root.rc !== 0 || !root.data || !Array.isArray(root.data.klines)) {
+    throw new SourceFetchError('eastmoney', '响应结构不符');
+  }
+  const bars = root.data.klines
+    .map((line) => {
+      const p = String(line).split(',');
+      return {
+        code: code.trim(),
+        date: p[0] ?? '',
+        open: num(p[1]),
+        close: num(p[2]),
+        high: num(p[3]),
+        low: num(p[4]),
+        volume: Math.round(num(p[5])), // 东财原生「手」
+        amount: Math.round(num(p[6])), // 东财「元」
+      };
+    })
+    .filter(isValidBar);
+  if (bars.length === 0) throw new SourceFetchError('eastmoney', '解析后无有效bar');
+  return bars;
+}
+
+// ---------------------------------------------------------------------------
+// 抓取主流程
+// ---------------------------------------------------------------------------
+
+/** 可注入 fetch（默认 RN 全局 fetch），便于单测 mock */
+export type FetchLike = (url: string, init?: { signal?: AbortSignal; headers?: Record<string, string> }) => Promise<{
+  ok: boolean;
+  status: number;
+  json(): Promise<unknown>;
+}>;
+
+async function fetchJsonWithTimeout(fetchImpl: FetchLike, url: string, source: KlineSource): Promise<unknown> {
+  const controller = new AbortController();
+  const timer = setTimeout(() => controller.abort(), FETCH_TIMEOUT_MS);
+  try {
+    const res = await fetchImpl(url, {
+      signal: controller.signal,
+      headers: { 'User-Agent': 'Mozilla/5.0', Accept: 'application/json,text/plain,*/*' },
+    });
+    if (!res.ok) throw new SourceFetchError(source, `HTTP ${res.status}`);
+    return await res.json();
+  } catch (e) {
+    if (e instanceof SourceFetchError) throw e;
+    const msg = e instanceof Error ? (e.name === 'AbortError' ? `超时 ${FETCH_TIMEOUT_MS}ms` : e.message) : String(e);
+    throw new SourceFetchError(source, msg);
+  } finally {
+    clearTimeout(timer);
+  }
+}
+
+const SOURCE_IMPL: Record<
+  KlineSource,
+  { buildUrl: (code: string, days: number) => string; parse: (payload: unknown, code: string) => KlineDaily[] }
+> = {
+  tencent: { buildUrl: buildTencentUrl, parse: parseTencent },
+  sina: { buildUrl: buildSinaUrl, parse: parseSina },
+  eastmoney: { buildUrl: buildEastmoneyUrl, parse: parseEastmoney },
+};
+
 /**
  * 抓取单只股票最近 N 天日K（前复权 qfq），按 SOURCE_PRIORITY 三源降级。
- *
- * S2 实现要点：
- *  - 腾讯: https://web.ifzq.gtimg.cn/appstock/app/fqkline/get?param={symbol},day,,,{N},qfq
- *  - 新浪: https://money.finance.sina.com.cn/quotes_service/api/json_v2.php/CN_MarketData.getKLineData?symbol={symbol}&scale=240&ma=no&datalen={N}
- *  - 东财: https://push2his.eastmoney.com/api/qt/stock/kline/get?secid={1|0}.{code}&klt=101&fqt=1&lmt={N}&fields1=f1,f2,f3&fields2=f51,f52,f53,f54,f55,f56,f57
+ * 返回按日期升序、去重后的 bars。
  *
  * @throws AllSourcesFailedError 三源全部失败时
  */
 export async function fetchDailyKline(
   code: string,
-  days: number = DEFAULT_FETCH_DAYS
+  days: number = DEFAULT_FETCH_DAYS,
+  fetchImpl: FetchLike = fetch as unknown as FetchLike
 ): Promise<FetchResult> {
-  // S1 骨架：S2 阶段实现真实抓取与解析
-  void code;
-  void days;
-  throw new AllSourcesFailedError(code, [
-    new SourceFetchError('tencent', 'S1 骨架未实现，S2 填充'),
-  ]);
+  const errors: SourceFetchError[] = [];
+  for (const source of SOURCE_PRIORITY) {
+    const impl = SOURCE_IMPL[source];
+    try {
+      const payload = await fetchJsonWithTimeout(fetchImpl, impl.buildUrl(code, days), source);
+      const raw = impl.parse(payload, code);
+      // 去重 + 升序（防上游偶发重复/乱序）
+      const seen = new Set<string>();
+      const bars = raw
+        .filter((b) => (seen.has(b.date) ? false : (seen.add(b.date), true)))
+        .sort((a, b) => (a.date < b.date ? -1 : 1));
+      return { bars, source };
+    } catch (e) {
+      errors.push(e instanceof SourceFetchError ? e : new SourceFetchError(source, String(e)));
+    }
+  }
+  throw new AllSourcesFailedError(code, errors);
 }
