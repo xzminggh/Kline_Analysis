@@ -1,0 +1,119 @@
+{
+  "task": "批量生成26个K线策略独立App，共享数据源，一致UI风格",
+  "loop_altitude": "medium",
+  "loop_altitude_rationale": "顺序依赖阶段，单agent执行，爆炸半径中等（新目录不影响现有代码），可逆性高",
+  "selection_log": [
+    { "decision": "D0", "answer": "loop", "why": "每个App可用tsc+test机器验证done?" },
+    { "decision": "D1", "answer": "staged (4 seams)", "why": "shared→template→26apps→test，每阶段产出可检查制品" },
+    { "decision": "D2", "answer": "plan_execute_verify×3 + review×1", "why": "各阶段有计划但需验证；最后阶段为整体审查" },
+    { "decision": "D3", "answer": "on_the_loop", "why": "blast中等×reversibility高×feedback好，门控处人工确认" },
+    { "decision": "D4", "answer": "medium", "why": "阶段间有依赖，顺序执行" },
+    { "decision": "D5", "answer": "每阶段max=3，外层max=4", "why": "失败时loopback到上游阶段" },
+    { "decision": "D6", "answer": "iteration_first", "why": "tsc/test秒级反馈，可频繁验证" }
+  ],
+  "stages": [
+    {
+      "id": "extract_shared",
+      "definition_of_done": {
+        "goal": "shared/目录包含indicators/、services/、database/、components/，且每个模块可独立import",
+        "machine_verifiable": true
+      },
+      "loop_pattern": "plan_execute_verify",
+      "feedback_signal": {
+        "check": "cd kline-strategy-apps && npx tsc --noEmit --project shared/tsconfig.json",
+        "expect": "pass",
+        "falsifiable_when": "shared模块有类型错误或导入路径不正确",
+        "passing_but_wrong": "tsc通过但运行时import失败（如循环依赖）——需后续阶段验证"
+      },
+      "stop_conditions": {
+        "failure": ["共享模块抽取后tsc持续报错"],
+        "max_iterations": 3,
+        "on_failure": { "action": "escalate" }
+      },
+      "depends_on": []
+    },
+    {
+      "id": "create_template",
+      "definition_of_done": {
+        "goal": "app-template/目录包含完整App骨架，npx tsc --noEmit通过，expo start可启动",
+        "machine_verifiable": true
+      },
+      "loop_pattern": "plan_execute_verify",
+      "feedback_signal": {
+        "check": "cd kline-strategy-apps/app-template && npx tsc --noEmit && npm test",
+        "expect": "pass",
+        "falsifiable_when": "母版App有类型错误或测试失败",
+        "passing_but_wrong": "tsc通过但UI交互逻辑错误——需人工在Expo Go验证"
+      },
+      "stop_conditions": {
+        "failure": ["母版App tsc或测试失败"],
+        "max_iterations": 3,
+        "on_failure": { "action": "loopback", "to": "extract_shared" }
+      },
+      "depends_on": ["extract_shared"]
+    },
+    {
+      "id": "batch_generate",
+      "definition_of_done": {
+        "goal": "26个App目录全部创建，每个App的tsc --noEmit通过",
+        "machine_verifiable": true
+      },
+      "loop_pattern": "retry",
+      "feedback_signal": {
+        "check": "cd kline-strategy-apps && for /d %i in (app-*) do (cd %i && npx tsc --noEmit && cd ..)",
+        "expect": "pass",
+        "falsifiable_when": "任一App有类型错误或导入失败",
+        "passing_but_wrong": "所有App tsc通过但策略逻辑未正确注入——需测试阶段验证"
+      },
+      "stop_conditions": {
+        "failure": ["连续3个App生成失败"],
+        "max_iterations": 3,
+        "on_failure": { "action": "loopback", "to": "create_template" }
+      },
+      "depends_on": ["create_template"]
+    },
+    {
+      "id": "batch_test",
+      "definition_of_done": {
+        "goal": "26个App全部npm test通过，expo start可启动",
+        "machine_verifiable": true
+      },
+      "loop_pattern": "review",
+      "feedback_signal": {
+        "check": "cd kline-strategy-apps && for /d %i in (app-*) do (cd %i && npm test && cd ..)",
+        "expect": "pass",
+        "falsifiable_when": "任一App测试失败或无法启动",
+        "passing_but_wrong": "测试通过但策略逻辑错误——需人工在Expo Go验证交互"
+      },
+      "stop_conditions": {
+        "failure": ["超过50%App测试失败"],
+        "max_iterations": 3,
+        "on_failure": { "action": "loopback", "to": "batch_generate" }
+      },
+      "depends_on": ["batch_generate"]
+    }
+  ],
+  "human_placement": "on_the_loop",
+  "maker_checker": {
+    "separate_checker": true,
+    "scope": "验证26个App的策略逻辑正确性、UI一致性、交互友好性"
+  },
+  "harness_primitives": [
+    "typescript (tsc --noEmit)",
+    "jest (npm test)",
+    "expo start (Expo Go调试)",
+    "node scripts批量生成"
+  ],
+  "stop_conditions": {
+    "success": "26个App全部tsc通过+test通过+Expo Go可启动",
+    "failure": ["母版App设计有根本性缺陷需重新设计"],
+    "escalate": ["连续3轮失败", "母版App测试不通过"],
+    "max_iterations": 4
+  },
+  "risk_guards": [
+    { "risk": "共享模块导入路径错误", "mitigation": "抽取后立即tsc验证" },
+    { "risk": "策略逻辑注入失败", "mitigation": "每个App生成后验证策略配置文件" },
+    { "risk": "26个App依赖版本不一致", "mitigation": "统一package.json模板" },
+    { "risk": "UI风格不一致", "mitigation": "统一theme/colors.ts和组件库" }
+  ]
+}
