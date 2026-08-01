@@ -18,6 +18,7 @@
 | 10 | lessons_learned_26apps_full_build.md | 26策略App完整构建 | T01延伸到25个App: 基础设施同步 + 26策略实现 + 编译验证 + app.json唯一性 | 2026-07-31 |
 | 11 | lessons_learned_git_push_and_eas_build.md | Git双推与Expo云打包 | Gitee+GitHub双远端、EAS Build APK、.easignore配置、SVG图标生成 | 2026-07-31 |
 | 12 | lessons_learned_expo_test_icon_build.md | Expo Go测试+图标部署+EAS | 图标部署脚本、app.json修复、数据库自动建表、Expo免费额度限制 | 2026-07-31 |
+| 13 | lessons_learned_detail_refresh.md | 详情页实时刷新 | 联网补齐后DetailScreen从DB重读kline+重跑策略+刷新UI | 2026-08-01 |
 
 ## 使用方式
 - 新的经验文件命名为 `lessons_learned_<stage>_<topic>.md`
