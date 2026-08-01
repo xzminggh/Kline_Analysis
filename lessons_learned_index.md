@@ -19,6 +19,7 @@
 | 11 | lessons_learned_git_push_and_eas_build.md | Git双推与Expo云打包 | Gitee+GitHub双远端、EAS Build APK、.easignore配置、SVG图标生成 | 2026-07-31 |
 | 12 | lessons_learned_expo_test_icon_build.md | Expo Go测试+图标部署+EAS | 图标部署脚本、app.json修复、数据库自动建表、Expo免费额度限制 | 2026-07-31 |
 | 13 | lessons_learned_detail_refresh.md | 详情页实时刷新 | 联网补齐后DetailScreen从DB重读kline+重跑策略+刷新UI | 2026-08-01 |
+| 14 | lessons_learned_local_apk_build.md | 本地APK构建 | Gradle版本兼容(Kotlin 2.1.20 vs 2.3.0)、JDK17安装、CMake路径修复、单架构快速构建 | 2026-08-01 |
 
 ## 使用方式
 - 新的经验文件命名为 `lessons_learned_<stage>_<topic>.md`
