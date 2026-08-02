@@ -21,6 +21,7 @@
 | 13 | lessons_learned_detail_refresh.md | 详情页实时刷新 | 联网补齐后DetailScreen从DB重读kline+重跑策略+刷新UI | 2026-08-01 |
 | 14 | lessons_learned_local_apk_build.md | 本地APK构建 | Gradle版本兼容(Kotlin 2.1.20 vs 2.3.0)、JDK17安装、CMake路径修复、单架构快速构建 | 2026-08-01 |
 | 15 | ../kline-strategy-apps/docs/local-apk-build-guide.md | 本地APK构建完整指南 | Windows纯PowerShell方案、JDK17/Gradle9.3.1/CMake配置、正反经验总结、通用脚本模板 | 2026-08-01 |
+| 16 | ../kline-strategy-apps/DEVELOPMENT-LOG.md | 26策略App开发完整日志 | 策略指标修复(findLocalExtrema/S03/S01/T03/V02) + Android构建修复(reactNativeArchitectures/ndk位置/Gradle版本) + 数据库 + Expo预构建 | 2026-08-02 |
 
 ## 使用方式
 - 新的经验文件命名为 `lessons_learned_<stage>_<topic>.md`
