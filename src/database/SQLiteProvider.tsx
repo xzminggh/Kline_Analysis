@@ -3,6 +3,7 @@ import * as SQLite from 'expo-sqlite';
 import * as FileSystemLegacy from 'expo-file-system/legacy';
 import { File } from 'expo-file-system';
 import { Buffer } from 'buffer';
+import type { KlineRow } from '../services/sources/types.ts';
 
 export interface Stock {
   code: string;
@@ -41,6 +42,8 @@ export interface DatabaseContextType {
   getMeta: () => Promise<Record<string, string>>;
   importDatabase: (fileUri: string) => Promise<DatabaseImportResult>;
   getBackupList: () => Promise<string[]>;
+  getLatestKlineDate: (code: string) => Promise<string | null>;
+  upsertKlineRows: (rows: KlineRow[]) => Promise<number>;
 }
 
 const DatabaseContext = createContext<DatabaseContextType | null>(null);
@@ -319,6 +322,38 @@ export const SQLiteProvider: React.FC<{ children: ReactNode }> = ({ children }) 
     }
   };
 
+  const getLatestKlineDate = async (code: string): Promise<string | null> => {
+    if (!db) return null;
+    try {
+      const row = await db.getFirstAsync<{ d: string | null }>(
+        'SELECT MAX(date) AS d FROM kline_daily WHERE code = ?',
+        [code]
+      );
+      return row?.d ?? null;
+    } catch (error) {
+      console.error('getLatestKlineDate failed:', error);
+      return null;
+    }
+  };
+
+  const upsertKlineRows = async (rows: KlineRow[]): Promise<number> => {
+    if (!db || rows.length === 0) return 0;
+    try {
+      await db.withTransactionAsync(async () => {
+        for (const r of rows) {
+          await db.runAsync(
+            'INSERT OR IGNORE INTO kline_daily (code, date, open, high, low, close, volume, amount) VALUES (?, ?, ?, ?, ?, ?, ?, ?)',
+            [r.code, r.date, r.open, r.high, r.low, r.close, r.volume, r.amount]
+          );
+        }
+      });
+      return rows.length;
+    } catch (error) {
+      console.error('upsertKlineRows failed:', error);
+      return 0;
+    }
+  };
+
   const value: DatabaseContextType = {
     db,
     isConnected,
@@ -331,6 +366,8 @@ export const SQLiteProvider: React.FC<{ children: ReactNode }> = ({ children }) 
     getMeta,
     importDatabase,
     getBackupList,
+    getLatestKlineDate,
+    upsertKlineRows,
   };
 
   return (
