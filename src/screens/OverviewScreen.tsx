@@ -37,13 +37,16 @@ function SignalBadge({ signal }: { signal: 'BUY' | 'SELL' | 'NEUTRAL' }) {
 
 export default function OverviewScreen() {
   const navigation = useNavigation();
-  const { isConnected, getTables, getStockCount, getKlineCount, getStocks, getKlineByCode, importDatabase } = useDatabase();
+  const { isConnected, db, getTables, getStockCount, getKlineCount, getStocks, getKlineByCode, importDatabase } = useDatabase();
   const [tables, setTables] = useState<string[]>([]);
   const [stockCount, setStockCount] = useState(0);
   const [klineCount, setKlineCount] = useState(0);
   const [loading, setLoading] = useState(true);
   const [isRunning, setIsRunning] = useState(false);
   const [progress, setProgress] = useState({ current: 0, total: 0 });
+  const [filler] = useState(() => new KlineFiller());
+  const [isFilling, setIsFilling] = useState(false);
+  const [fillProgress, setFillProgress] = useState({ current: 0, total: 0, message: '' });
   const [summary, setSummary] = useState(getAnalysisSummary());
   const [topStocks, setTopStocks] = useState(getAllAnalysis());
   const [filters, setFilters] = useState<FilterState>({
@@ -109,6 +112,79 @@ export default function OverviewScreen() {
     } finally {
       setIsRunning(false);
     }
+  };
+
+  const handleFillAll = async () => {
+    if (!isConnected || !db) {
+      Alert.alert('提示', '数据库未连接，请先导入数据库', [{ text: '确定' }]);
+      return;
+    }
+
+    const stocks = await getStocks();
+    if (stocks.length === 0) {
+      Alert.alert('提示', '没有可补齐的股票', [{ text: '确定' }]);
+      return;
+    }
+
+    const total = stocks.length;
+    const BATCH_SIZE = 50;
+    const batchCount = Math.ceil(total / BATCH_SIZE);
+    const confirmMessage =
+      batchCount > 1
+        ? `即将对 ${total} 只股票分 ${batchCount} 批进行补齐，是否继续？`
+        : `即将对 ${total} 只股票进行补齐，是否继续？`;
+
+    Alert.alert('确认补齐', confirmMessage, [
+      { text: '取消', style: 'cancel' },
+      {
+        text: '确认',
+        onPress: async () => {
+          setIsFilling(true);
+          setFillProgress({ current: 0, total, message: '准备补齐...' });
+
+          try {
+            const allCodes = stocks.map((s) => s.code);
+            let totalSuccess = 0;
+            let totalFailed = 0;
+            let totalSkipped = 0;
+
+            for (let b = 0; b < batchCount; b++) {
+              const batchStart = b * BATCH_SIZE;
+              const batchCodes = allCodes.slice(batchStart, batchStart + BATCH_SIZE);
+
+              const result = await filler.fillBatch(batchCodes, db, (p) => {
+                setFillProgress({
+                  current: batchStart + p.current,
+                  total,
+                  message: `第${b + 1}/${batchCount}批: ${p.code} (${batchStart + p.current}/${total})`,
+                });
+              });
+
+              totalSuccess += result.success;
+              totalFailed += result.failed;
+              totalSkipped += result.skipped;
+            }
+
+            // 刷新 K 线数量
+            const newKlineCount = await getKlineCount();
+            setKlineCount(newKlineCount);
+
+            const message =
+              `补齐完成\n` +
+              `成功: ${totalSuccess}\n` +
+              `失败: ${totalFailed}\n` +
+              `跳过: ${totalSkipped}`;
+            Alert.alert('补齐完成', message, [{ text: '确定' }]);
+          } catch (error: any) {
+            console.error('Fill failed:', error);
+            Alert.alert('补齐失败', error?.message || '发生未知错误', [{ text: '确定' }]);
+          } finally {
+            setIsFilling(false);
+            setFillProgress({ current: 0, total: 0, message: '' });
+          }
+        },
+      },
+    ]);
   };
 
   const handleImportDatabase = async () => {
@@ -234,6 +310,35 @@ export default function OverviewScreen() {
           <Text style={styles.infoLabel}>K线数据量:</Text>
           <Text style={styles.infoValue}>{klineCount.toLocaleString()}</Text>
         </View>
+        <TouchableOpacity
+          style={[styles.fillButton, isFilling && styles.fillButtonDisabled]}
+          onPress={handleFillAll}
+          disabled={isFilling || isRunning}
+        >
+          <Text style={styles.fillButtonText}>
+            {isFilling
+              ? `补齐中 ${fillProgress.current}/${fillProgress.total}...`
+              : '补齐最新 K 线'}
+          </Text>
+        </TouchableOpacity>
+        {isFilling && fillProgress.message.length > 0 && (
+          <View style={styles.fillProgressSection}>
+            <View style={styles.progressBarContainer}>
+              <View
+                style={[
+                  styles.progressBarFill,
+                  {
+                    width:
+                      fillProgress.total > 0
+                        ? `${(fillProgress.current / fillProgress.total) * 100}%`
+                        : '0%',
+                  },
+                ]}
+              />
+            </View>
+            <Text style={styles.progressText}>{fillProgress.message}</Text>
+          </View>
+        )}
       </View>
 
       {summary && (
@@ -285,7 +390,7 @@ export default function OverviewScreen() {
                 <TouchableOpacity
                   key={result.stock.code}
                   style={styles.stockItem}
-                  onPress={() => navigation.navigate('详情', { stockCode: result.stock.code })}
+                  onPress={() => (navigation as any).navigate('详情', { stockCode: result.stock.code })}
                   activeOpacity={0.7}
                 >
                   <View style={styles.stockTop}>
@@ -440,6 +545,41 @@ const styles = StyleSheet.create({
     color: '#0a0a0f',
     fontSize: 18,
     fontWeight: 'bold',
+  },
+  fillButton: {
+    backgroundColor: '#10b981',
+    padding: 16,
+    borderRadius: 8,
+    alignItems: 'center',
+    marginTop: 16,
+  },
+  fillButtonDisabled: {
+    backgroundColor: '#374151',
+  },
+  fillButtonText: {
+    color: '#0a0a0f',
+    fontSize: 18,
+    fontWeight: 'bold',
+  },
+  fillProgressSection: {
+    marginTop: 12,
+  },
+  progressBarContainer: {
+    height: 8,
+    backgroundColor: '#0f3460',
+    borderRadius: 4,
+    overflow: 'hidden',
+  },
+  progressBarFill: {
+    height: '100%',
+    backgroundColor: '#00d4ff',
+    borderRadius: 4,
+  },
+  progressText: {
+    color: '#94a3b8',
+    fontSize: 12,
+    marginTop: 8,
+    textAlign: 'center',
   },
   perfToggle: {
     marginTop: 12,

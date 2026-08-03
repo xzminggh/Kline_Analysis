@@ -67,6 +67,7 @@ export function analyzeStock(
 
   const ema5 = calculateEMA(closes, 5);
   const ema20 = calculateEMA(closes, 20);
+  const ma20 = calculateMA(closes, 20);
   const ma60 = calculateMA(closes, 60);
   const ma20Line = ma20(closes); // [wb修改] 修复真bug：原第109行把 ma20 函数本身当数组传入K01，MA20支撑/压力分支从未生效
   const rsi14 = calculateRSI(closes, 14);
@@ -156,7 +157,7 @@ function t01DoubleMA(ema5: number[], ema20: number[], closes: number[], n: numbe
   return { id: 'T01', name: '双均线金叉/死叉', signal: 'NEUTRAL', score: 0, details: '无交叉信号' };
 }
 
-function t02Ma60Cross(closes: number[], ma60: number[], ma60Slope: number[], n: number): StrategyResult {
+function t02Ma60Cross(closes: number[], ma60: (number | null)[], ma60Slope: (number | null)[], n: number): StrategyResult {
   const prevN = n - 1;
   if (ma60[n] === null || ma60[prevN] === null || ma60Slope[n] === null) {
     return { id: 'T02', name: '60日均线多空分界', signal: 'NEUTRAL', score: 0, details: '数据不足' };
@@ -205,7 +206,7 @@ function t04ThreeLineReversal(opens: number[], closes: number[], n: number): Str
   return { id: 'T04', name: '三线反向反转', signal: 'NEUTRAL', score: 0, details: '无三连K线反转' };
 }
 
-function m01BollingerBounce(highs: number[], lows: number[], closes: number[], bollinger: { upper: number[], middle: number[], lower: number[] }, n: number): StrategyResult {
+function m01BollingerBounce(highs: number[], lows: number[], closes: number[], bollinger: { upper: (number | null)[], middle: (number | null)[], lower: (number | null)[] }, n: number): StrategyResult {
   if (bollinger.lower[n] === null || bollinger.upper[n] === null) {
     return { id: 'M01', name: '布林带触轨反弹', signal: 'NEUTRAL', score: 0, details: '数据不足' };
   }
@@ -220,7 +221,7 @@ function m01BollingerBounce(highs: number[], lows: number[], closes: number[], b
   return { id: 'M01', name: '布林带触轨反弹', signal: 'NEUTRAL', score: 0, details: '未触及布林带轨' };
 }
 
-function m02RsiOverboughtOversold(rsi14: number[], opens: number[], closes: number[], n: number): StrategyResult {
+function m02RsiOverboughtOversold(rsi14: (number | null)[], opens: number[], closes: number[], n: number): StrategyResult {
   if (rsi14[n] === null) {
     return { id: 'M02', name: 'RSI超买超卖', signal: 'NEUTRAL', score: 0, details: '数据不足' };
   }
@@ -235,7 +236,7 @@ function m02RsiOverboughtOversold(rsi14: number[], opens: number[], closes: numb
   return { id: 'M02', name: 'RSI超买超卖', signal: 'NEUTRAL', score: 0, details: 'RSI在正常区间' };
 }
 
-function m03TripleFilter(bollinger: { upper: number[], middle: number[], lower: number[] }, rsi14: number[], highs: number[], lows: number[], volumes: number[], volumeMa5: number[], n: number): StrategyResult {
+function m03TripleFilter(bollinger: { upper: (number | null)[], middle: (number | null)[], lower: (number | null)[] }, rsi14: (number | null)[], highs: number[], lows: number[], volumes: number[], volumeMa5: (number | null)[], n: number): StrategyResult {
   if (bollinger.lower[n] === null || bollinger.upper[n] === null || rsi14[n] === null || volumeMa5[n] === null) {
     return { id: 'M03', name: '三重过滤', signal: 'NEUTRAL', score: 0, details: '数据不足' };
   }
@@ -266,7 +267,7 @@ function m04GapFill(opens: number[], closes: number[], highs: number[], lows: nu
   return { id: 'M04', name: '缺口回补', signal: 'NEUTRAL', score: 0, details: '无缺口或未回补' };
 }
 
-function p01MomCrossZero(mom10: number[], n: number): StrategyResult {
+function p01MomCrossZero(mom10: (number | null)[], n: number): StrategyResult {
   const prevN = n - 1;
   if (mom10[n] === null || mom10[prevN] === null) {
     return { id: 'P01', name: 'MOM动量穿零轴', signal: 'NEUTRAL', score: 0, details: '数据不足' };
@@ -282,12 +283,14 @@ function p01MomCrossZero(mom10: number[], n: number): StrategyResult {
   return { id: 'P01', name: 'MOM动量穿零轴', signal: 'NEUTRAL', score: 0, details: 'MOM未穿越零轴' };
 }
 
-function p02RocVolumeConfirm(roc10: number[], volumes: number[], volumeMa10: number[], n: number): StrategyResult {
-  if (roc10[n] === null || volumeMa10[n] === null) {
+function p02RocVolumeConfirm(roc10: (number | null)[], volumes: number[], volumeMa10: (number | null)[], n: number): StrategyResult {
+  const roc10Value = roc10[n];
+  const volumeMa10Value = volumeMa10[n];
+  if (roc10Value === null || volumeMa10Value === null) {
     return { id: 'P02', name: 'ROC+放量确认', signal: 'NEUTRAL', score: 0, details: '数据不足' };
   }
-  const buyCondition = roc10[n] > 5 && volumes[n] > volumeMa10[n] * 1.5;
-  const sellCondition = roc10[n] < -5 && volumes[n] > volumeMa10[n] * 1.5;
+  const buyCondition = roc10Value > 5 && volumes[n] > volumeMa10Value * 1.5;
+  const sellCondition = roc10Value < -5 && volumes[n] > volumeMa10Value * 1.5;
   if (buyCondition) {
     return { id: 'P02', name: 'ROC+放量确认', signal: 'BUY', score: 8, details: 'ROC>5且放量1.5倍' };
   }
@@ -297,8 +300,9 @@ function p02RocVolumeConfirm(roc10: number[], volumes: number[], volumeMa10: num
   return { id: 'P02', name: 'ROC+放量确认', signal: 'NEUTRAL', score: 0, details: '未满足放量条件' };
 }
 
-function p03VolumeBreakout(closes: number[], highs: number[], lows: number[], volumes: number[], volumeMa10: number[], n: number): StrategyResult {
-  if (volumeMa10[n] === null || n < 5) {
+function p03VolumeBreakout(closes: number[], highs: number[], lows: number[], volumes: number[], volumeMa10: (number | null)[], n: number): StrategyResult {
+  const volumeMa10Value = volumeMa10[n];
+  if (volumeMa10Value === null || n < 5) {
     return { id: 'P03', name: '倍量突破前高/前低', signal: 'NEUTRAL', score: 0, details: '数据不足' };
   }
   const prev5High = Math.max(...highs.slice(n - 5, n));
@@ -335,7 +339,7 @@ function s01DoubleBottomTop(closes: number[], n: number): StrategyResult {
   if (n < 20) {
     return { id: 'S01', name: '双底/双顶颈线突破', signal: 'NEUTRAL', score: 0, details: '数据不足' };
   }
-  const recentLows = closes.slice(n - 20, n).reduce((acc, val, idx) => {
+  const recentLows = closes.slice(n - 20, n).reduce<{ idx: number; val: number }[]>((acc, val, idx) => {
     if (val < closes[idx + n - 20 - 1] && val < closes[Math.min(idx + n - 20 + 1, n - 1)]) {
       acc.push({ idx: idx + n - 20, val });
     }
@@ -432,7 +436,7 @@ function s04HammerShootingStar(highs: number[], lows: number[], opens: number[],
   return { id: 'S04', name: '锤子线/流星线确认', signal: 'NEUTRAL', score: 0, details: '无锤子线/流星线' };
 }
 
-function k01MaSupportResistance(closes: number[], highs: number[], lows: number[], opens: number[], ma60: number[], ma20: number[], n: number): StrategyResult {
+function k01MaSupportResistance(closes: number[], highs: number[], lows: number[], opens: number[], ma60: (number | null)[], ma20: (number | null)[], n: number): StrategyResult {
   if (ma60[n] === null || ma20[n] === null) {
     return { id: 'K01', name: '均线支撑/压力回踩', signal: 'NEUTRAL', score: 0, details: '数据不足' };
   }
@@ -496,15 +500,18 @@ function k03FibonacciRetracement(closes: number[], opens: number[], n: number): 
   return { id: 'K03', name: '斐波那契回撤共振', signal: 'NEUTRAL', score: 0, details: '未触及斐波那契位' };
 }
 
-function v01BollingerSqueeze(bollingerWidth: number[], volumes: number[], volumeMa5: number[], closes: number[], opens: number[], bollinger: { upper: number[], middle: number[], lower: number[] }, n: number): StrategyResult {
-  if (n < 5 || bollingerWidth[n] === null || volumeMa5[n] === null || bollinger.middle[n] === null) {
+function v01BollingerSqueeze(bollingerWidth: (number | null)[], volumes: number[], volumeMa5: (number | null)[], closes: number[], opens: number[], bollinger: { upper: (number | null)[], middle: (number | null)[], lower: (number | null)[] }, n: number): StrategyResult {
+  const bollingerWidthValue = bollingerWidth[n];
+  const volumeMa5Value = volumeMa5[n];
+  const bollingerMiddleValue = bollinger.middle[n];
+  if (n < 5 || bollingerWidthValue === null || volumeMa5Value === null || bollingerMiddleValue === null) {
     return { id: 'V01', name: '布林带收口突破', signal: 'NEUTRAL', score: 0, details: '数据不足' };
   }
-  const avgWidth = bollingerWidth.slice(n - 5, n).reduce((a, b) => a + (b || 0), 0) / 5;
-  const isSqueezed = bollingerWidth[n] < avgWidth;
-  const isVolumeUp = volumes[n] > volumeMa5[n] * 1.2;
-  const isBreakUp = closes[n] > bollinger.middle[n] && closes[n] > opens[n];
-  const isBreakDown = closes[n] < bollinger.middle[n] && closes[n] < opens[n];
+  const avgWidth = bollingerWidth.slice(n - 5, n).reduce((a: number, b) => a + (b || 0), 0) / 5;
+  const isSqueezed = bollingerWidthValue < avgWidth;
+  const isVolumeUp = volumes[n] > volumeMa5Value * 1.2;
+  const isBreakUp = closes[n] > bollingerMiddleValue && closes[n] > opens[n];
+  const isBreakDown = closes[n] < bollingerMiddleValue && closes[n] < opens[n];
   if (isSqueezed && isVolumeUp && isBreakUp) {
     return { id: 'V01', name: '布林带收口突破', signal: 'BUY', score: 8, details: '布林收口后放量上破' };
   }
@@ -514,7 +521,7 @@ function v01BollingerSqueeze(bollingerWidth: number[], volumes: number[], volume
   return { id: 'V01', name: '布林带收口突破', signal: 'NEUTRAL', score: 0, details: '布林未收口或未突破' };
 }
 
-function v02AtrBreakout(atr14: number[], closes: number[], n: number): StrategyResult {
+function v02AtrBreakout(atr14: (number | null)[], closes: number[], n: number): StrategyResult {
   const prevN = n - 1;
   if (n < 20 || atr14[n] === null) {
     return { id: 'V02', name: 'ATR窄幅后方向选择', signal: 'NEUTRAL', score: 0, details: '数据不足' };
@@ -535,7 +542,7 @@ function v02AtrBreakout(atr14: number[], closes: number[], n: number): StrategyR
   return { id: 'V02', name: 'ATR窄幅后方向选择', signal: 'NEUTRAL', score: 0, details: 'ATR未处于窄幅区间' };
 }
 
-function q01LowVolumeBottom(volumes: number[], volumeMa20: number[], lows: number[], closes: number[], n: number): StrategyResult {
+function q01LowVolumeBottom(volumes: number[], volumeMa20: (number | null)[], lows: number[], closes: number[], n: number): StrategyResult {
   if (n < 20 || volumeMa20[n] === null) {
     return { id: 'Q01', name: '地量见底', signal: 'NEUTRAL', score: 0, details: '数据不足' };
   }
@@ -548,11 +555,12 @@ function q01LowVolumeBottom(volumes: number[], volumeMa20: number[], lows: numbe
   return { id: 'Q01', name: '地量见底', signal: 'NEUTRAL', score: 0, details: '未出现地量见底' };
 }
 
-function q02HighVolumeTop(volumes: number[], volumeMa100: number[], highs: number[], opens: number[], closes: number[], n: number): StrategyResult {
-  if (n < 100 || volumeMa100[n] === null) {
+function q02HighVolumeTop(volumes: number[], volumeMa100: (number | null)[], highs: number[], opens: number[], closes: number[], n: number): StrategyResult {
+  const volumeMa100Value = volumeMa100[n];
+  if (n < 100 || volumeMa100Value === null) {
     return { id: 'Q02', name: '天量逃顶', signal: 'NEUTRAL', score: 0, details: '数据不足' };
   }
-  const isHighVolume = volumes[n] > volumeMa100[n] * 2.5;
+  const isHighVolume = volumes[n] > volumeMa100Value * 2.5;
   const hasUpperShadow = highs[n] > closes[n] && (highs[n] - closes[n]) > Math.abs(closes[n] - opens[n]);
   const isRed = closes[n] < opens[n];
   if (isHighVolume && (hasUpperShadow || isRed)) {
@@ -581,7 +589,7 @@ function d01MacdDivergence(closes: number[], macd: { macd: number[], signal: num
   return { id: 'D01', name: 'MACD底/顶背离', signal: 'NEUTRAL', score: 0, details: '无MACD背离' };
 }
 
-function d02RsiDivergence(closes: number[], rsi14: number[], opens: number[], n: number): StrategyResult {
+function d02RsiDivergence(closes: number[], rsi14: (number | null)[], opens: number[], n: number): StrategyResult {
   if (n < 30 || rsi14[n] === null) {
     return { id: 'D02', name: 'RSI隐性背离', signal: 'NEUTRAL', score: 0, details: '数据不足' };
   }
@@ -600,7 +608,7 @@ function d02RsiDivergence(closes: number[], rsi14: number[], opens: number[], n:
   return { id: 'D02', name: 'RSI隐性背离', signal: 'NEUTRAL', score: 0, details: '无RSI背离' };
 }
 
-function d03CciExtreme(cci20: number[], closes: number[], ema5: number[], n: number): StrategyResult {
+function d03CciExtreme(cci20: (number | null)[], closes: number[], ema5: number[], n: number): StrategyResult {
   const prevN = n - 1;
   if (cci20[n] === null || cci20[prevN] === null || ema5[n] === null) {
     return { id: 'D03', name: 'CCI极端拐点', signal: 'NEUTRAL', score: 0, details: '数据不足' };
@@ -614,8 +622,4 @@ function d03CciExtreme(cci20: number[], closes: number[], ema5: number[], n: num
     return { id: 'D03', name: 'CCI极端拐点', signal: 'SELL', score: -6, details: 'CCI从+100以上下穿' };
   }
   return { id: 'D03', name: 'CCI极端拐点', signal: 'NEUTRAL', score: 0, details: 'CCI未穿越极端区间' };
-}
-
-function ma20(data: number[]): number[] {
-  return calculateMA(data, 20);
 }

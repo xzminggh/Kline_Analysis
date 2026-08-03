@@ -91,9 +91,12 @@ describe('Indicators', () => {
     it('should have upper >= middle >= lower', () => {
       const result = calculateBollinger(TEST_DATA, 5);
       for (let i = 0; i < TEST_DATA.length; i++) {
-        if (result.upper[i] !== null && result.middle[i] !== null && result.lower[i] !== null) {
-          expect(result.upper[i]).toBeGreaterThanOrEqual(result.middle[i]);
-          expect(result.middle[i]).toBeGreaterThanOrEqual(result.lower[i]);
+        const upper = result.upper[i];
+        const middle = result.middle[i];
+        const lower = result.lower[i];
+        if (upper !== null && middle !== null && lower !== null) {
+          expect(upper).toBeGreaterThanOrEqual(middle);
+          expect(middle).toBeGreaterThanOrEqual(lower);
         }
       }
     });

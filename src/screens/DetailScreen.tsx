@@ -1,11 +1,12 @@
 import React, { useEffect, useState } from 'react';
-import { View, Text, StyleSheet, ScrollView, ActivityIndicator, TextInput, TouchableOpacity } from 'react-native';
+import { View, Text, StyleSheet, ScrollView, ActivityIndicator, TextInput, TouchableOpacity, Alert } from 'react-native';
 import { useRoute } from '@react-navigation/native';
 import { useDatabase, KlineDaily, Stock } from '../database/SQLiteProvider';
 import { getAnalysisByCode } from '../services/AnalysisService';
 import { analyzeStock, StockAnalysis } from '../strategies/StrategyEngine';
 import KlineChart from '../components/KlineChart';
 import ErrorBoundary from '../components/ErrorBoundary';
+import { KlineFiller } from '../services/KlineFiller';
 
 function StarRating({ rating }: { rating: number }) {
   return (
@@ -36,7 +37,7 @@ function SignalBadge({ signal }: { signal: 'BUY' | 'SELL' | 'NEUTRAL' }) {
 
 export default function DetailScreen() {
   const route = useRoute();
-  const { getKlineByCode, getStocks } = useDatabase();
+  const { getKlineByCode, getStocks, isConnected, db } = useDatabase();
   const routeParams = (route.params as { stockCode?: string }) || {};
   const [code, setCode] = useState(routeParams.stockCode || '000001');
   const [klineData, setKlineData] = useState<KlineDaily[]>([]);
@@ -44,6 +45,9 @@ export default function DetailScreen() {
   const [stockList, setStockList] = useState<Stock[]>([]);
   const [analysis, setAnalysis] = useState<StockAnalysis | null>(null);
   const [analysisLoading, setAnalysisLoading] = useState(false);
+  const [filler] = useState(() => new KlineFiller());
+  const [isFilling, setIsFilling] = useState(false);
+  const [fillResult, setFillResult] = useState<string>('');
   const [chartSettings, setChartSettings] = useState({
     showMA5: true,
     showMA10: true,
@@ -122,6 +126,36 @@ export default function DetailScreen() {
     loadKlineData();
   };
 
+  const handleFillSingle = async () => {
+    if (!isConnected || !db) {
+      Alert.alert('提示', '数据库未连接，请先导入数据库', [{ text: '确定' }]);
+      return;
+    }
+    setIsFilling(true);
+    setFillResult('');
+    try {
+      const result = await filler.fillSingle(code.trim(), db);
+      if (result.addedCount > 0) {
+        setFillResult(`新增 ${result.addedCount} 条K线 (${result.source})`);
+        // 补齐后刷新 K 线数据
+        await loadKlineData();
+      } else if (result.success) {
+        setFillResult('已是最新数据');
+      } else {
+        setFillResult(`补齐失败: ${result.error}`);
+        Alert.alert('补齐失败', result.error || '未知错误', [{ text: '确定' }]);
+      }
+    } catch (error: any) {
+      console.error('Fill single failed:', error);
+      setFillResult(`补齐异常: ${error?.message || '未知错误'}`);
+      Alert.alert('补齐失败', error?.message || '未知错误', [{ text: '确定' }]);
+    } finally {
+      setIsFilling(false);
+      // 3秒后自动清除结果提示
+      setTimeout(() => setFillResult(''), 3000);
+    }
+  };
+
   const latestData = klineData[klineData.length - 1];
   // 关联股票名称
   const currentStockName = stockList.find(s => s.code === code)?.name || '未知';
@@ -136,8 +170,27 @@ export default function DetailScreen() {
             <Text style={styles.sectionTitle}>{code}</Text>
             <Text style={styles.stockNameDisplay}>{currentStockName}</Text>
           </View>
-          <Text style={styles.timestamp}>数据日期: {latestDate}</Text>
+          <View style={styles.stockHeaderRight}>
+            <Text style={styles.timestamp}>数据日期: {latestDate}</Text>
+            <TouchableOpacity
+              style={[styles.fillBtn, isFilling && styles.fillBtnDisabled]}
+              onPress={handleFillSingle}
+              disabled={isFilling}
+            >
+              <Text style={styles.fillBtnText}>
+                {isFilling ? '补齐中...' : '补齐此股'}
+              </Text>
+            </TouchableOpacity>
+          </View>
         </View>
+        {fillResult.length > 0 && (
+          <Text style={[
+            styles.fillResultText,
+            fillResult.includes('失败') || fillResult.includes('异常') ? styles.fillResultError : styles.fillResultSuccess,
+          ]}>
+            {fillResult}
+          </Text>
+        )}
         <View style={styles.inputRow}>
           <TextInput
             style={styles.input}
@@ -659,6 +712,10 @@ const styles = StyleSheet.create({
     alignItems: 'baseline',
     gap: 12,
   },
+  stockHeaderRight: {
+    alignItems: 'flex-end',
+    gap: 6,
+  },
   stockNameDisplay: {
     color: '#ffffff',
     fontSize: 16,
@@ -731,5 +788,30 @@ const styles = StyleSheet.create({
   collapseIcon: {
     color: '#00d4ff',
     fontSize: 12,
+  },
+  fillBtn: {
+    backgroundColor: '#10b981',
+    paddingHorizontal: 12,
+    paddingVertical: 6,
+    borderRadius: 6,
+  },
+  fillBtnDisabled: {
+    backgroundColor: '#374151',
+  },
+  fillBtnText: {
+    color: '#0a0a0f',
+    fontSize: 13,
+    fontWeight: 'bold',
+  },
+  fillResultText: {
+    fontSize: 13,
+    marginTop: 8,
+    textAlign: 'center',
+  },
+  fillResultSuccess: {
+    color: '#10b981',
+  },
+  fillResultError: {
+    color: '#ef4444',
   },
 });

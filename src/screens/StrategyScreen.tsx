@@ -183,7 +183,7 @@ export default function StrategyScreen() {
 
                 return (
                   <View key={result.stock.code} style={styles.resultItem}>
-                    <View style={styles.resultHeader}>
+                    <View style={styles.resultItemHeader}>
                       <View style={styles.resultLeft}>
                         <Text style={styles.resultCode}>{result.stock.code}</Text>
                         <Text style={styles.resultName}>{result.stock.name}</Text>
@@ -400,7 +400,7 @@ const styles = StyleSheet.create({
     borderRadius: 8,
     marginBottom: 8,
   },
-  resultHeader: {
+  resultItemHeader: {
     flexDirection: 'row',
     justifyContent: 'space-between',
     alignItems: 'flex-start',

@@ -1,5 +1,5 @@
-export function calculateMA(data: number[], period: number): number[] {
-  const result: number[] = [];
+export function calculateMA(data: number[], period: number): (number | null)[] {
+  const result: (number | null)[] = [];
   for (let i = period - 1; i < data.length; i++) {
     let sum = 0;
     for (let j = i - period + 1; j <= i; j++) {
@@ -68,12 +68,13 @@ export function calculateMACD(data: number[], fast: number = 12, slow: number = 
   return { macd, signal: signalLine, histogram };
 }
 
-export function calculateBollinger(data: number[], period: number = 20, stdDev: number = 2): { upper: number[], middle: number[], lower: number[] } {
+export function calculateBollinger(data: number[], period: number = 20, stdDev: number = 2): { upper: (number | null)[], middle: (number | null)[], lower: (number | null)[] } {
   const middle = calculateMA(data, period);
   const upper: (number | null)[] = [];
   const lower: (number | null)[] = [];
   for (let i = 0; i < data.length; i++) {
-    if (middle[i] === null) {
+    const middleValue = middle[i];
+    if (middleValue === null) {
       upper.push(null);
       lower.push(null);
       continue;
@@ -81,11 +82,11 @@ export function calculateBollinger(data: number[], period: number = 20, stdDev: 
     const start = i - period + 1;
     let sum = 0;
     for (let j = start; j <= i; j++) {
-      sum += Math.pow(data[j] - middle[i], 2);
+      sum += Math.pow(data[j] - middleValue, 2);
     }
     const std = Math.sqrt(sum / period);
-    upper.push(middle[i] + stdDev * std);
-    lower.push(middle[i] - stdDev * std);
+    upper.push(middleValue + stdDev * std);
+    lower.push(middleValue - stdDev * std);
   }
   return { upper: upper as number[], middle, lower: lower as number[] };
 }
@@ -162,7 +163,7 @@ export function calculateROC(data: number[], period: number = 10): number[] {
   return result as number[];
 }
 
-export function calculateVolumeMA(volume: number[], period: number): number[] {
+export function calculateVolumeMA(volume: number[], period: number): (number | null)[] {
   return calculateMA(volume, period);
 }
 
@@ -182,10 +183,13 @@ export function calculateFibonacciLevels(high: number, low: number): { level0: n
 export function calculateBollingerWidth(upper: number[], lower: number[], middle: number[]): number[] {
   const width: (number | null)[] = [];
   for (let i = 0; i < upper.length; i++) {
-    if (upper[i] === null || lower[i] === null || middle[i] === null || middle[i] === 0) {
+    const upperValue = upper[i];
+    const lowerValue = lower[i];
+    const middleValue = middle[i];
+    if (upperValue === null || lowerValue === null || middleValue === null || middleValue === 0) {
       width.push(null);
     } else {
-      width.push((upper[i] - lower[i]) / middle[i]);
+      width.push((upperValue - lowerValue) / middleValue);
     }
   }
   return width as number[];
@@ -226,10 +230,12 @@ export function calculateSlope(data: number[], period: number = 1): number[] {
     result.push(null);
   }
   for (let i = period; i < data.length; i++) {
-    if (data[i - period] === null || data[i] === null) {
+    const prevValue = data[i - period];
+    const currentValue = data[i];
+    if (prevValue === null || currentValue === null) {
       result.push(null);
     } else {
-      result.push(data[i] - data[i - period]);
+      result.push(currentValue - prevValue);
     }
   }
   return result as number[];
