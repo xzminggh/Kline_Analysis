@@ -149,95 +149,90 @@ export default function KlineChart({
   });
 
   // PanResponder: 双指缩放 + 单指拖动 + 双击重置
-  const panResponder = useRef(
-    PanResponder.create({
-      onStartShouldSetPanResponder: () => true,
-      onStartShouldSetPanResponderCapture: () => true,
-      onMoveShouldSetPanResponder: (evt, gestureState) => {
-        if (evt.nativeEvent.touches.length === 2) return true;
-        return Math.abs(gestureState.dx) > 3 || Math.abs(gestureState.dy) > 3;
-      },
-      onMoveShouldSetPanResponderCapture: (evt) => {
-        return evt.nativeEvent.touches.length === 2;
-      },
-      onPanResponderTerminationRequest: () => false,
-      onPanResponderGrant: (evt) => {
-        movedDuringTouch.current = false;
-        if (evt.nativeEvent.touches.length === 2) {
-          const t = evt.nativeEvent.touches;
-          const dx = t[0].locationX - t[1].locationX;
-          const dy = t[0].locationY - t[1].locationY;
-          const distance = Math.sqrt(dx * dx + dy * dy);
-          pinchState.current = {
-            startDistance: distance,
-            startVisibleCount: visibleCount,
-            active: true,
-          };
-          panState.current.active = false;
-        } else if (evt.nativeEvent.touches.length === 1) {
-          panState.current = { startEndIndex: actualEnd, active: true };
-          pinchState.current.active = false;
-        }
-      },
-      onPanResponderMove: (evt, gestureState) => {
-        if (Math.abs(gestureState.dx) > 4 || Math.abs(gestureState.dy) > 4) {
-          movedDuringTouch.current = true;
-          setTouchIndex(null);
-        }
-
-        if (evt.nativeEvent.touches.length === 2 && pinchState.current.active) {
-          // 双指缩放
-          const t = evt.nativeEvent.touches;
-          const dx = t[0].locationX - t[1].locationX;
-          const dy = t[0].locationY - t[1].locationY;
-          const distance = Math.sqrt(dx * dx + dy * dy);
-          if (distance > 10 && pinchState.current.startDistance > 0) {
-            // 核心：手指分开→distance变大→ratio变小→可见K线变多（缩小）
-            // 手指合拢→distance变小→ratio变大→可见K线变少（放大）
-            const ratio = pinchState.current.startDistance / distance;
-            const newVisible = Math.round(pinchState.current.startVisibleCount * ratio);
-            setVisibleCount(Math.max(MIN_VISIBLE, Math.min(MAX_VISIBLE, newVisible)));
+  const panResponder = useMemo(
+    () =>
+      PanResponder.create({
+        onStartShouldSetPanResponder: () => true,
+        onStartShouldSetPanResponderCapture: () => true,
+        onMoveShouldSetPanResponder: (evt, gestureState) => {
+          if (evt.nativeEvent.touches.length === 2) return true;
+          return Math.abs(gestureState.dx) > 3 || Math.abs(gestureState.dy) > 3;
+        },
+        onMoveShouldSetPanResponderCapture: (evt) => {
+          return evt.nativeEvent.touches.length === 2;
+        },
+        onPanResponderTerminationRequest: () => false,
+        onPanResponderGrant: (evt) => {
+          movedDuringTouch.current = false;
+          if (evt.nativeEvent.touches.length === 2) {
+            const t = evt.nativeEvent.touches;
+            const dx = t[0].locationX - t[1].locationX;
+            const dy = t[0].locationY - t[1].locationY;
+            const distance = Math.sqrt(dx * dx + dy * dy);
+            pinchState.current = {
+              startDistance: distance,
+              startVisibleCount: visibleCount,
+              active: true,
+            };
+            panState.current.active = false;
+          } else if (evt.nativeEvent.touches.length === 1) {
+            panState.current = { startEndIndex: actualEnd, active: true };
+            pinchState.current.active = false;
           }
-        } else if (evt.nativeEvent.touches.length === 1 && panState.current.active && gestureState.dx !== 0) {
-          // 单指拖动 - 平移可见范围
-          const candlePlusGap = candleWidth + gap;
-          if (candlePlusGap > 0) {
-            const movedCandles = Math.round(gestureState.dx / candlePlusGap);
-            const newEnd = panState.current.startEndIndex - movedCandles;
-            setEndIndex(Math.max(actualVisible, Math.min(totalCount, newEnd)));
-          }
-        }
-      },
-      onPanResponderRelease: (evt) => {
-        pinchState.current.active = false;
-        panState.current.active = false;
-        // 双击检测
-        if (!movedDuringTouch.current && evt.nativeEvent.touches.length === 0) {
-          const now = Date.now();
-          const tapX = evt.nativeEvent.locationX;
-          if (now - lastTapTime.current < 300 && Math.abs(tapX - lastTapX.current) < 30) {
-            // 双击 - 重置
-            setVisibleCount(defaultVisibleCount);
-            setEndIndex(totalCount);
+        },
+        onPanResponderMove: (evt, gestureState) => {
+          if (Math.abs(gestureState.dx) > 4 || Math.abs(gestureState.dy) > 4) {
+            movedDuringTouch.current = true;
             setTouchIndex(null);
-          } else {
-            // 单击 - 显示十字光标
-            const x = tapX - PADDING.left;
-            const idx = Math.floor(x / (candleWidth + gap));
-            if (idx >= 0 && idx < visibleData.length) {
-              setTouchIndex(idx);
+          }
+
+          if (evt.nativeEvent.touches.length === 2 && pinchState.current.active) {
+            const t = evt.nativeEvent.touches;
+            const dx = t[0].locationX - t[1].locationX;
+            const dy = t[0].locationY - t[1].locationY;
+            const distance = Math.sqrt(dx * dx + dy * dy);
+            if (distance > 10 && pinchState.current.startDistance > 0) {
+              const ratio = pinchState.current.startDistance / distance;
+              const newVisible = Math.round(pinchState.current.startVisibleCount * ratio);
+              setVisibleCount(Math.max(MIN_VISIBLE, Math.min(MAX_VISIBLE, newVisible)));
+            }
+          } else if (evt.nativeEvent.touches.length === 1 && panState.current.active && gestureState.dx !== 0) {
+            const candlePlusGap = candleWidth + gap;
+            if (candlePlusGap > 0) {
+              const movedCandles = Math.round(gestureState.dx / candlePlusGap);
+              const newEnd = panState.current.startEndIndex - movedCandles;
+              setEndIndex(Math.max(actualVisible, Math.min(totalCount, newEnd)));
             }
           }
-          lastTapTime.current = now;
-          lastTapX.current = tapX;
-        }
-      },
-      onPanResponderTerminate: () => {
-        pinchState.current.active = false;
-        panState.current.active = false;
-      },
-    })
-  ).current;
+        },
+        onPanResponderRelease: (evt) => {
+          pinchState.current.active = false;
+          panState.current.active = false;
+          if (!movedDuringTouch.current && evt.nativeEvent.touches.length === 0) {
+            const now = Date.now();
+            const tapX = evt.nativeEvent.locationX;
+            if (now - lastTapTime.current < 300 && Math.abs(tapX - lastTapX.current) < 30) {
+              setVisibleCount(defaultVisibleCount);
+              setEndIndex(totalCount);
+              setTouchIndex(null);
+            } else {
+              const x = tapX - PADDING.left;
+              const idx = Math.floor(x / (candleWidth + gap));
+              if (idx >= 0 && idx < visibleData.length) {
+                setTouchIndex(idx);
+              }
+            }
+            lastTapTime.current = now;
+            lastTapX.current = tapX;
+          }
+        },
+        onPanResponderTerminate: () => {
+          pinchState.current.active = false;
+          panState.current.active = false;
+        },
+      }),
+    [data.length, defaultVisibleCount, candleWidth, gap, actualVisible, actualEnd, visibleData.length]
+  );
 
   const renderCandles = () => {
     if (visibleData.length === 0) return null;

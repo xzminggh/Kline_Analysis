@@ -14,6 +14,7 @@ import {
   calculateGuppyMA,
   calculateSlope,
   calculateAmplitude,
+  findLocalExtrema,
 } from '../indicators/Indicators';
 
 export type SignalType = 'BUY' | 'SELL' | 'NEUTRAL';
@@ -69,7 +70,7 @@ export function analyzeStock(
   const ema20 = calculateEMA(closes, 20);
   const ma20 = calculateMA(closes, 20);
   const ma60 = calculateMA(closes, 60);
-  const ma20Line = ma20(closes); // [wb修改] 修复真bug：原第109行把 ma20 函数本身当数组传入K01，MA20支撑/压力分支从未生效
+  const ma20Line = ma20; // [wb修改] 修复真bug：原第109行把 ma20 函数本身当数组传入K01，MA20支撑/压力分支从未生效
   const rsi14 = calculateRSI(closes, 14);
   const macd = calculateMACD(closes);
   const bollinger = calculateBollinger(closes, 20, 2);
@@ -81,9 +82,13 @@ export function analyzeStock(
   const volumeMa10 = calculateVolumeMA(volumes, 10);
   const volumeMa20 = calculateVolumeMA(volumes, 20);
   const volumeMa100 = calculateVolumeMA(volumes, 100);
-  const bollingerWidth = calculateBollingerWidth(bollinger.upper, bollinger.lower, bollinger.middle);
+  const bollingerUpper = bollinger.upper.map(v => v ?? 0);
+  const bollingerLower = bollinger.lower.map(v => v ?? 0);
+  const bollingerMiddle = bollinger.middle.map(v => v ?? 0);
+  const bollingerWidth = calculateBollingerWidth(bollingerUpper, bollingerLower, bollingerMiddle);
   const guppyMa = calculateGuppyMA(closes);
-  const ma60Slope = calculateSlope(ma60, 1);
+  const ma60Values = ma60.map(v => v ?? 0);
+  const ma60Slope = calculateSlope(ma60Values, 1);
 
   const n = closes.length - 1;
   const prevN = n - 1;
@@ -104,11 +109,11 @@ export function analyzeStock(
   if (isEnabled('P02')) strategies.push(p02RocVolumeConfirm(roc10, volumes, volumeMa10, n));
   if (isEnabled('P03')) strategies.push(p03VolumeBreakout(closes, highs, lows, volumes, volumeMa10, n));
   if (isEnabled('P04')) strategies.push(p04EngulfingPattern(opens, closes, n));
-  if (isEnabled('S01')) strategies.push(s01DoubleBottomTop(closes, n));
+  if (isEnabled('S01')) strategies.push(s01DoubleBottomTop(closes, highs, lows, n));
   if (isEnabled('S02')) strategies.push(s02TriangleBreakout(highs, lows, closes, n));
-  if (isEnabled('S03')) strategies.push(s03HeadShoulder(closes, n));
+  if (isEnabled('S03')) strategies.push(s03HeadShoulder(closes, highs, lows, n));
   if (isEnabled('S04')) strategies.push(s04HammerShootingStar(highs, lows, opens, closes, n));
-  if (isEnabled('K01')) strategies.push(k01MaSupportResistance(closes, highs, lows, opens, ma60, ma20Line, n));
+  if (isEnabled('K01')) strategies.push(k01MaSupportResistance(closes, ma20Line, n));
   if (isEnabled('K02')) strategies.push(k02PreviousHighLow(closes, opens, n));
   if (isEnabled('K03')) strategies.push(k03FibonacciRetracement(closes, opens, n));
   if (isEnabled('V01')) strategies.push(v01BollingerSqueeze(bollingerWidth, volumes, volumeMa5, closes, opens, bollinger, n));
@@ -174,17 +179,26 @@ function t02Ma60Cross(closes: number[], ma60: (number | null)[], ma60Slope: (num
 }
 
 function t03GuppyCross(guppyMa: { shortTerm: number[][], longTerm: number[][] }, n: number): StrategyResult {
-  const allShortAboveLong = guppyMa.shortTerm.every(short => short[n] !== null && 
-    guppyMa.longTerm.every(long => long[n] !== null && short[n]! > long[n]!));
-  const allShortBelowLong = guppyMa.shortTerm.every(short => short[n] !== null && 
-    guppyMa.longTerm.every(long => long[n] !== null && short[n]! < long[n]!));
-  if (allShortAboveLong) {
-    return { id: 'T03', name: '顾比均线组穿越', signal: 'BUY', score: 7, details: '短期组全部上穿长期组' };
+  if (n < 1) {
+    return { id: 'T03', name: '顾比均线组穿越', signal: 'NEUTRAL', score: 0, details: '数据不足' };
   }
-  if (allShortBelowLong) {
-    return { id: 'T03', name: '顾比均线组穿越', signal: 'SELL', score: -7, details: '短期组全部下穿长期组' };
+  const prev = n - 1;
+  const shortLatest = guppyMa.shortTerm.reduce((sum, arr) => sum + arr[n], 0) / guppyMa.shortTerm.length;
+  const longLatest = guppyMa.longTerm.reduce((sum, arr) => sum + arr[n], 0) / guppyMa.longTerm.length;
+  const shortPrev = guppyMa.shortTerm.reduce((sum, arr) => sum + arr[prev], 0) / guppyMa.shortTerm.length;
+  const longPrev = guppyMa.longTerm.reduce((sum, arr) => sum + arr[prev], 0) / guppyMa.longTerm.length;
+
+  if (shortLatest === null || longLatest === null || shortPrev === null || longPrev === null) {
+    return { id: 'T03', name: '顾比均线组穿越', signal: 'NEUTRAL', score: 0, details: '数据不足' };
   }
-  return { id: 'T03', name: '顾比均线组穿越', signal: 'NEUTRAL', score: 0, details: '均线组未完全穿越' };
+
+  const crossUp = shortLatest > longLatest && shortPrev <= longPrev;
+  const crossDown = shortLatest < longLatest && shortPrev >= longPrev;
+
+  if (crossUp) return { id: 'T03', name: '顾比均线组穿越', signal: 'BUY', score: 8, details: '短期均线组上穿长期均线组' };
+  if (crossDown) return { id: 'T03', name: '顾比均线组穿越', signal: 'SELL', score: -8, details: '短期均线组下穿长期均线组' };
+  if (shortLatest > longLatest) return { id: 'T03', name: '顾比均线组穿越', signal: 'NEUTRAL', score: 2, details: '短期均线组在长期均线上方' };
+  return { id: 'T03', name: '顾比均线组穿越', signal: 'NEUTRAL', score: -2, details: '短期均线组在长期均线下方' };
 }
 
 function t04ThreeLineReversal(opens: number[], closes: number[], n: number): StrategyResult {
@@ -335,35 +349,42 @@ function p04EngulfingPattern(opens: number[], closes: number[], n: number): Stra
   return { id: 'P04', name: '大阴线/大阳线反包', signal: 'NEUTRAL', score: 0, details: '无反包形态' };
 }
 
-function s01DoubleBottomTop(closes: number[], n: number): StrategyResult {
-  if (n < 20) {
+function s01DoubleBottomTop(closes: number[], highs: number[], lows: number[], n: number): StrategyResult {
+  if (n < 30) {
     return { id: 'S01', name: '双底/双顶颈线突破', signal: 'NEUTRAL', score: 0, details: '数据不足' };
   }
-  const recentLows = closes.slice(n - 20, n).reduce<{ idx: number; val: number }[]>((acc, val, idx) => {
-    if (val < closes[idx + n - 20 - 1] && val < closes[Math.min(idx + n - 20 + 1, n - 1)]) {
-      acc.push({ idx: idx + n - 20, val });
-    }
-    return acc;
-  }, [] as { idx: number; val: number }[]); // [wb修改] 类型标注，无运行时变化
-  const recentHighs = closes.slice(n - 20, n).reduce((acc, val, idx) => {
-    if (val > closes[idx + n - 20 - 1] && val > closes[Math.min(idx + n - 20 + 1, n - 1)]) {
-      acc.push({ idx: idx + n - 20, val });
-    }
-    return acc;
-  }, [] as { idx: number; val: number }[]); // [wb修改] 类型标注，无运行时变化
-  if (recentLows.length >= 2) {
-    const neckline = Math.max(...recentLows.map(l => closes.slice(l.idx, n).reduce((a, b) => Math.max(a, b), 0)));
-    if (closes[n] > neckline) {
-      return { id: 'S01', name: '双底/双顶颈线突破', signal: 'BUY', score: 8, details: '双底形态颈线突破' };
+  const extrema = findLocalExtrema(lows, 5);
+  const highExtrema = findLocalExtrema(highs, 5);
+
+  const lowVals: { idx: number, val: number }[] = [];
+  extrema.lows.forEach((v, i) => { if (v !== null) lowVals.push({ idx: i, val: v }); });
+
+  if (lowVals.length >= 2) {
+    const lastTwoLows = lowVals.slice(-2);
+    const lowDiff = Math.abs(lastTwoLows[0].val - lastTwoLows[1].val) / lastTwoLows[0].val;
+    if (lowDiff < 0.10) {
+      const neckline = Math.max(...closes.slice(n - 15, n));
+      if (closes[n] > neckline) {
+        return { id: 'S01', name: '双底/双顶颈线突破', signal: 'BUY', score: 7, details: '双底突破颈线' + neckline.toFixed(2) };
+      }
     }
   }
-  if (recentHighs.length >= 2) {
-    const neckline = Math.min(...recentHighs.map(h => closes.slice(h.idx, n).reduce((a, b) => Math.min(a, b), Infinity)));
-    if (closes[n] < neckline) {
-      return { id: 'S01', name: '双底/双顶颈线突破', signal: 'SELL', score: -8, details: '双顶形态颈线突破' };
+
+  const highVals: { idx: number, val: number }[] = [];
+  highExtrema.highs.forEach((v, i) => { if (v !== null) highVals.push({ idx: i, val: v }); });
+
+  if (highVals.length >= 2) {
+    const lastTwoHighs = highVals.slice(-2);
+    const highDiff = Math.abs(lastTwoHighs[0].val - lastTwoHighs[1].val) / lastTwoHighs[0].val;
+    if (highDiff < 0.10) {
+      const neckline = Math.min(...closes.slice(n - 15, n));
+      if (closes[n] < neckline) {
+        return { id: 'S01', name: '双底/双顶颈线突破', signal: 'SELL', score: -7, details: '双顶跌破颈线' + neckline.toFixed(2) };
+      }
     }
   }
-  return { id: 'S01', name: '双底/双顶颈线突破', signal: 'NEUTRAL', score: 0, details: '无双底/双顶形态' };
+
+  return { id: 'S01', name: '双底/双顶颈线突破', signal: 'NEUTRAL', score: 0, details: '未形成有效双底/双顶' };
 }
 
 function s02TriangleBreakout(highs: number[], lows: number[], closes: number[], n: number): StrategyResult {
@@ -386,33 +407,46 @@ function s02TriangleBreakout(highs: number[], lows: number[], closes: number[], 
   return { id: 'S02', name: '三角形整理末端突破', signal: 'NEUTRAL', score: 0, details: '未形成三角形突破' };
 }
 
-function s03HeadShoulder(closes: number[], n: number): StrategyResult {
-  if (n < 30) {
+function s03HeadShoulder(closes: number[], highs: number[], lows: number[], n: number): StrategyResult {
+  if (n < 40) {
     return { id: 'S03', name: '头肩底/顶颈线突破', signal: 'NEUTRAL', score: 0, details: '数据不足' };
   }
-  const recentData = closes.slice(n - 30, n);
-  let headIdx = -1;
-  let maxVal = -Infinity;
-  for (let i = 5; i < recentData.length - 5; i++) {
-    if (recentData[i] > maxVal) {
-      maxVal = recentData[i];
-      headIdx = i;
+  const lowExtrema = findLocalExtrema(lows, 5);
+  const highExtrema = findLocalExtrema(highs, 5);
+
+  const lowVals: { idx: number, val: number }[] = [];
+  lowExtrema.lows.forEach((v, i) => { if (v !== null) lowVals.push({ idx: i, val: v }); });
+
+  if (lowVals.length >= 3) {
+    const last3 = lowVals.slice(-3).map(l => l.val);
+    const head = Math.min(...last3);
+    const shoulders = last3.filter(v => v >= head * 1.01);
+    if (shoulders.length === 2 && Math.abs(shoulders[0] - shoulders[1]) / head < 0.08) {
+      const neckline = Math.max(...closes.slice(n - 20, n));
+      if (closes[n] > neckline) {
+        return { id: 'S03', name: '头肩底/顶颈线突破', signal: 'BUY', score: 7, details: '头肩底突破颈线' + neckline.toFixed(2) };
+      }
+      return { id: 'S03', name: '头肩底/顶颈线突破', signal: 'NEUTRAL', score: 3, details: '头肩底形成，颈线' + neckline.toFixed(2) + '，待突破' };
     }
   }
-  if (headIdx > 0) {
-    const leftShoulder = Math.max(...recentData.slice(0, headIdx));
-    const rightShoulder = Math.max(...recentData.slice(headIdx + 1));
-    const neckline = Math.min(leftShoulder, rightShoulder);
-    if (leftShoulder > 0 && rightShoulder > 0 && Math.abs(leftShoulder - rightShoulder) / leftShoulder < 0.1) {
-      if (closes[n] > neckline && (closes[n] - neckline) / neckline > 0.03) {
-        return { id: 'S03', name: '头肩底/顶颈线突破', signal: 'BUY', score: 10, details: '头肩底颈线突破' };
+
+  const highVals: { idx: number, val: number }[] = [];
+  highExtrema.highs.forEach((v, i) => { if (v !== null) highVals.push({ idx: i, val: v }); });
+
+  if (highVals.length >= 3) {
+    const last3 = highVals.slice(-3).map(h => h.val);
+    const head = Math.max(...last3);
+    const shoulders = last3.filter(v => v <= head * 0.99);
+    if (shoulders.length === 2 && Math.abs(shoulders[0] - shoulders[1]) / head < 0.08) {
+      const neckline = Math.min(...closes.slice(n - 20, n));
+      if (closes[n] < neckline) {
+        return { id: 'S03', name: '头肩底/顶颈线突破', signal: 'SELL', score: -7, details: '头肩顶跌破颈线' + neckline.toFixed(2) };
       }
-      if (closes[n] < neckline && (neckline - closes[n]) / neckline > 0.03) {
-        return { id: 'S03', name: '头肩底/顶颈线突破', signal: 'SELL', score: -10, details: '头肩顶颈线突破' };
-      }
+      return { id: 'S03', name: '头肩底/顶颈线突破', signal: 'NEUTRAL', score: -3, details: '头肩顶形成，颈线' + neckline.toFixed(2) + '，待跌破' };
     }
   }
-  return { id: 'S03', name: '头肩底/顶颈线突破', signal: 'NEUTRAL', score: 0, details: '无明显头肩形态' };
+
+  return { id: 'S03', name: '头肩底/顶颈线突破', signal: 'NEUTRAL', score: 0, details: '未形成有效头肩形态' };
 }
 
 function s04HammerShootingStar(highs: number[], lows: number[], opens: number[], closes: number[], n: number): StrategyResult {
@@ -436,27 +470,29 @@ function s04HammerShootingStar(highs: number[], lows: number[], opens: number[],
   return { id: 'S04', name: '锤子线/流星线确认', signal: 'NEUTRAL', score: 0, details: '无锤子线/流星线' };
 }
 
-function k01MaSupportResistance(closes: number[], highs: number[], lows: number[], opens: number[], ma60: (number | null)[], ma20: (number | null)[], n: number): StrategyResult {
-  if (ma60[n] === null || ma20[n] === null) {
+function k01MaSupportResistance(closes: number[], ma20: (number | null)[], n: number): StrategyResult {
+  if (n < 25) {
     return { id: 'K01', name: '均线支撑/压力回踩', signal: 'NEUTRAL', score: 0, details: '数据不足' };
   }
-  const ma20Support = lows[n] <= ma20[n] && closes[n] > ma20[n] && closes[n] > opens[n];
-  const ma60Support = lows[n] <= ma60[n] && closes[n] > ma60[n] && closes[n] > opens[n];
-  const ma20Resistance = highs[n] >= ma20[n] && closes[n] < ma20[n] && closes[n] < opens[n];
-  const ma60Resistance = highs[n] >= ma60[n] && closes[n] < ma60[n] && closes[n] < opens[n];
-  if (ma60Support) {
-    return { id: 'K01', name: '均线支撑/压力回踩', signal: 'BUY', score: 8, details: '回踩MA60支撑' };
+  const prev = n - 1;
+  if (ma20[n] === null || ma20[prev] === null) {
+    return { id: 'K01', name: '均线支撑/压力回踩', signal: 'NEUTRAL', score: 0, details: '数据不足' };
   }
-  if (ma20Support) {
-    return { id: 'K01', name: '均线支撑/压力回踩', signal: 'BUY', score: 6, details: '回踩MA20支撑' };
+  const dist = Math.abs(closes[n] - ma20[n]!) / ma20[n]! * 100;
+  const wasAbove = closes[prev] > ma20[prev]!;
+  const nowAbove = closes[n] > ma20[n]!;
+  const touched = dist < 2;
+
+  if (wasAbove && touched && nowAbove) {
+    return { id: 'K01', name: '均线支撑/压力回踩', signal: 'BUY', score: 6, details: '回踩MA20获支撑（距离' + dist.toFixed(1) + '%）' };
   }
-  if (ma60Resistance) {
-    return { id: 'K01', name: '均线支撑/压力回踩', signal: 'SELL', score: -8, details: '反抽MA60压力' };
+  if (!wasAbove && touched && !nowAbove) {
+    return { id: 'K01', name: '均线支撑/压力回踩', signal: 'SELL', score: -6, details: '回踩MA20受阻（距离' + dist.toFixed(1) + '%）' };
   }
-  if (ma20Resistance) {
-    return { id: 'K01', name: '均线支撑/压力回踩', signal: 'SELL', score: -6, details: '反抽MA20压力' };
+  if (closes[n] > ma20[n]!) {
+    return { id: 'K01', name: '均线支撑/压力回踩', signal: 'NEUTRAL', score: 1, details: '价格在MA20上方（距离' + dist.toFixed(1) + '%）' };
   }
-  return { id: 'K01', name: '均线支撑/压力回踩', signal: 'NEUTRAL', score: 0, details: '未回踩均线' };
+  return { id: 'K01', name: '均线支撑/压力回踩', signal: 'NEUTRAL', score: -1, details: '价格在MA20下方（距离' + dist.toFixed(1) + '%）' };
 }
 
 function k02PreviousHighLow(closes: number[], opens: number[], n: number): StrategyResult {
@@ -523,23 +559,28 @@ function v01BollingerSqueeze(bollingerWidth: (number | null)[], volumes: number[
 
 function v02AtrBreakout(atr14: (number | null)[], closes: number[], n: number): StrategyResult {
   const prevN = n - 1;
-  if (n < 20 || atr14[n] === null) {
+  if (n < 30 || atr14[n] === null) {
     return { id: 'V02', name: 'ATR窄幅后方向选择', signal: 'NEUTRAL', score: 0, details: '数据不足' };
   }
-  const recentAtr = atr14.slice(n - 20, n).filter(v => v !== null);
-  const minAtr = Math.min(...recentAtr);
-  const maxAtr = Math.max(...recentAtr);
-  const atrPercentile = (atr14[n] - minAtr) / (maxAtr - minAtr);
-  const isNarrow = atrPercentile < 0.2;
-  const gain = closes[n] > 0 && closes[prevN] > 0 ? (closes[n] - closes[prevN]) / closes[prevN] * 100 : 0;
-  const loss = closes[n] > 0 && closes[prevN] > 0 ? (closes[prevN] - closes[n]) / closes[prevN] * 100 : 0;
-  if (isNarrow && gain > 3) {
-    return { id: 'V02', name: 'ATR窄幅后方向选择', signal: 'BUY', score: 7, details: 'ATR窄幅后涨幅>3%' };
+  const recentATR = atr14.slice(n - 20, n).filter((a): a is number => a !== null);
+  if (recentATR.length < 10) {
+    return { id: 'V02', name: 'ATR窄幅后方向选择', signal: 'NEUTRAL', score: 0, details: '数据不足' };
   }
-  if (isNarrow && loss > 3) {
-    return { id: 'V02', name: 'ATR窄幅后方向选择', signal: 'SELL', score: -7, details: 'ATR窄幅后跌幅>3%' };
+  const avgATR = recentATR.reduce((a, b) => a + b, 0) / recentATR.length;
+  const currentATR = atr14[n]!;
+  const isNarrow = currentATR < avgATR * 0.75;
+  const breakout = closes[n] - closes[prevN];
+
+  if (isNarrow && breakout > currentATR * 0.3) {
+    return { id: 'V02', name: 'ATR窄幅后方向选择', signal: 'BUY', score: 7, details: 'ATR窄幅后向上突破' };
   }
-  return { id: 'V02', name: 'ATR窄幅后方向选择', signal: 'NEUTRAL', score: 0, details: 'ATR未处于窄幅区间' };
+  if (isNarrow && breakout < -currentATR * 0.3) {
+    return { id: 'V02', name: 'ATR窄幅后方向选择', signal: 'SELL', score: -7, details: 'ATR窄幅后向下突破' };
+  }
+  if (isNarrow) {
+    return { id: 'V02', name: 'ATR窄幅后方向选择', signal: 'NEUTRAL', score: 0, details: 'ATR收窄，等待方向选择' };
+  }
+  return { id: 'V02', name: 'ATR窄幅后方向选择', signal: 'NEUTRAL', score: 0, details: 'ATR正常波动' };
 }
 
 function q01LowVolumeBottom(volumes: number[], volumeMa20: (number | null)[], lows: number[], closes: number[], n: number): StrategyResult {

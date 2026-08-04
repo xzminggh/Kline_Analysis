@@ -7,6 +7,7 @@ import * as DocumentPicker from 'expo-document-picker';
 import SearchFilter, { FilterState } from '../components/SearchFilter';
 import Dashboard from '../components/Dashboard';
 import { SyncPanel } from '../components/SyncPanel'; // [wb修改] 联网补齐面板
+import { KlineFiller } from '../services/KlineFiller';
 
 function StarRating({ rating }: { rating: number }) {
   return (
@@ -310,35 +311,7 @@ export default function OverviewScreen() {
           <Text style={styles.infoLabel}>K线数据量:</Text>
           <Text style={styles.infoValue}>{klineCount.toLocaleString()}</Text>
         </View>
-        <TouchableOpacity
-          style={[styles.fillButton, isFilling && styles.fillButtonDisabled]}
-          onPress={handleFillAll}
-          disabled={isFilling || isRunning}
-        >
-          <Text style={styles.fillButtonText}>
-            {isFilling
-              ? `补齐中 ${fillProgress.current}/${fillProgress.total}...`
-              : '补齐最新 K 线'}
-          </Text>
-        </TouchableOpacity>
-        {isFilling && fillProgress.message.length > 0 && (
-          <View style={styles.fillProgressSection}>
-            <View style={styles.progressBarContainer}>
-              <View
-                style={[
-                  styles.progressBarFill,
-                  {
-                    width:
-                      fillProgress.total > 0
-                        ? `${(fillProgress.current / fillProgress.total) * 100}%`
-                        : '0%',
-                  },
-                ]}
-              />
-            </View>
-            <Text style={styles.progressText}>{fillProgress.message}</Text>
-          </View>
-        )}
+
       </View>
 
       {summary && (
