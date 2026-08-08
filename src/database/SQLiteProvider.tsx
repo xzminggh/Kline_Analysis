@@ -44,6 +44,7 @@ export interface DatabaseContextType {
   getBackupList: () => Promise<string[]>;
   getLatestKlineDate: (code: string) => Promise<string | null>;
   upsertKlineRows: (rows: KlineRow[]) => Promise<number>;
+  upsertStock: (code: string, name: string, market: string) => Promise<boolean>;
 }
 
 const DatabaseContext = createContext<DatabaseContextType | null>(null);
@@ -58,6 +59,28 @@ export const useDatabase = () => {
 
 const DB_NAME = 'kline.sqlite';
 const DB_DIR = `${FileSystemLegacy.documentDirectory}SQLite/`;
+
+/** [wb修改] 判定“文件不是 SQLite 数据库”类损坏错误（文件被覆盖成 0 字节/非库文件） */
+const isNotDatabaseError = (e: unknown): boolean => {
+  const msg = String((e as { message?: string })?.message ?? e ?? '');
+  return msg.includes('not a database');
+};
+
+/** [wb修改] 探测库是否可用：执行最轻量查询，prepare 阶段即可暴露“file is not a database” */
+const probeDatabaseHealth = async (database: SQLite.SQLiteDatabase): Promise<boolean> => {
+  try {
+    await database.getFirstAsync<{ ok: number }>('SELECT 1 AS ok');
+    return true;
+  } catch {
+    return false;
+  }
+};
+
+/** [wb修改] 隔离损坏库文件（改名保留现场，避免每次启动都打开坏文件） */
+const quarantineCorruptDb = async (path: string): Promise<void> => {
+  const ts = Date.now();
+  await FileSystemLegacy.moveAsync({ from: path, to: `${DB_DIR}kline_corrupt_${ts}.sqlite` }).catch(() => {});
+};
 
 /**
  * [wb修改] 数据库 schema 版本（用 PRAGMA user_version 标记）。
@@ -120,13 +143,52 @@ export const SQLiteProvider: React.FC<{ children: ReactNode }> = ({ children }) 
         await copyDatabase(); // 仅当本地缺失且存在 seed 时拷贝；Expo Go 无 seed 时落为空库
 
         const database = await SQLite.openDatabaseAsync(DB_NAME, {}, DB_DIR.replace(/\/$/, ''));
+        // [wb修改] 健康检查：文件损坏（被覆盖成非 SQLite 内容）时隔离坏文件并重建空库，
+        // 避免每次启动都抛 "file is not a database"
+        if (!(await probeDatabaseHealth(database))) {
+          console.warn('[SQLiteProvider] 检测到损坏/非 SQLite 文件，已隔离，重建空库（原文件保留为 kline_corrupt_*.sqlite）');
+          await database.closeAsync().catch(() => {});
+          await quarantineCorruptDb(`${DB_DIR}${DB_NAME}`);
+          dbRef.current = await SQLite.openDatabaseAsync(DB_NAME, {}, DB_DIR.replace(/\/$/, ''));
+        } else {
+          dbRef.current = database;
+        }
+        const dbHandle = dbRef.current;
+        // [wb修改] 自动建表（Expo Go 无 seed 库时保证「输入代码联网导入」可用；与 26 策略 App 的 shared schema 一致，幂等）
         try {
-          await migrateVolumeToWanShou(database); // 原地转万手 + 置版本（幂等、安全，不删数据）
+          await dbHandle.execAsync(`
+            CREATE TABLE IF NOT EXISTS stocks (
+              code TEXT PRIMARY KEY,
+              name TEXT,
+              market TEXT,
+              sector_id TEXT,
+              status TEXT
+            );
+            CREATE TABLE IF NOT EXISTS kline_daily (
+              code TEXT,
+              date TEXT,
+              open REAL,
+              high REAL,
+              low REAL,
+              close REAL,
+              volume REAL,
+              amount REAL,
+              PRIMARY KEY(code, date)
+            );
+            CREATE TABLE IF NOT EXISTS meta (
+              key TEXT PRIMARY KEY,
+              value TEXT
+            );
+          `);
+        } catch (ddlErr) {
+          console.error('Auto-create tables failed:', ddlErr);
+        }
+        try {
+          await migrateVolumeToWanShou(dbHandle); // 原地转万手 + 置版本（幂等、安全，不删数据）
         } catch (mErr) {
           console.error('Volume migration failed (data may be in old unit):', mErr);
         }
-        dbRef.current = database;
-        setDb(database);
+        setDb(dbHandle);
         setIsConnected(true);
       } catch (error) {
         console.error('Failed to initialize database:', error);
@@ -287,7 +349,37 @@ export const SQLiteProvider: React.FC<{ children: ReactNode }> = ({ children }) 
         to: localDbPath,
       });
 
-      const newDb = await SQLite.openDatabaseAsync(DB_NAME, {}, DB_DIR.replace(/\/$/, ''));
+      // [wb修改] 导入校验：拒绝 0 字节/非 SQLite 文件，避免污染线上库且每次启动报 "file is not a database"
+      let newDb: SQLite.SQLiteDatabase;
+      try {
+        const copied = await FileSystemLegacy.getInfoAsync(localDbPath);
+        if (!copied.exists || !copied.size || copied.size < 16) {
+          throw new Error('file copy failed or empty');
+        }
+        newDb = await SQLite.openDatabaseAsync(DB_NAME, {}, DB_DIR.replace(/\/$/, ''));
+        if (!(await probeDatabaseHealth(newDb))) {
+          throw new Error('file is not a database');
+        }
+      } catch (impErr: any) {
+        // 回滚：优先恢复备份，否则删掉坏文件重建空库；无论如何让 App 保持可用
+        try {
+          if (createdBackup) {
+            await FileSystemLegacy.copyAsync({ from: createdBackup, to: localDbPath });
+          } else {
+            await FileSystemLegacy.deleteAsync(localDbPath, { idempotent: true });
+          }
+          newDb = await SQLite.openDatabaseAsync(DB_NAME, {}, DB_DIR.replace(/\/$/, ''));
+          if (createdBackup) await migrateVolumeToWanShou(newDb).catch(() => {});
+          dbRef.current = newDb;
+          setDb(newDb);
+          setIsConnected(true);
+        } catch (rollbackErr) {
+          console.error('Import rollback failed:', rollbackErr);
+        }
+        console.error(`Failed to import database (invalid file): ${impErr?.message || String(impErr)}`);
+        return { success: false, error: `导入的文件不是有效的 SQLite 数据库${createdBackup ? '，已恢复原库' : ''}` };
+      }
+
       try {
         await migrateVolumeToWanShou(newDb); // 导入库统一转万手 + 置版本，避免下次启动被重置
       } catch (mErr) {
@@ -354,6 +446,21 @@ export const SQLiteProvider: React.FC<{ children: ReactNode }> = ({ children }) 
     }
   };
 
+  const upsertStock = async (code: string, name: string, market: string): Promise<boolean> => {
+    const database = dbRef.current;
+    if (!database) return false;
+    try {
+      await database.runAsync(
+        'INSERT OR REPLACE INTO stocks (code, name, market, sector_id, status) VALUES (?, ?, ?, ?, ?)',
+        [code, name, market, '', '']
+      );
+      return true;
+    } catch (error) {
+      console.error('upsertStock failed:', error);
+      return false;
+    }
+  };
+
   const value: DatabaseContextType = {
     db,
     isConnected,
@@ -368,6 +475,7 @@ export const SQLiteProvider: React.FC<{ children: ReactNode }> = ({ children }) 
     getBackupList,
     getLatestKlineDate,
     upsertKlineRows,
+    upsertStock,
   };
 
   return (

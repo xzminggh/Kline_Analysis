@@ -19,7 +19,7 @@ import type { FetchLike } from './KlineFetcher';
 // 内存假 DB：记录全部 SQL，模拟 stocks/kline_daily/meta
 // ---------------------------------------------------------------------------
 
-function bar(code: string, date: string, close: number, volume = 1000): KlineDaily {
+function bar(code: string, date: string, close: number, volume = 3): KlineDaily {
   return { code, date, open: close, high: close * 1.01, low: close * 0.99, close, volume, amount: 0 };
 }
 
@@ -62,6 +62,18 @@ class FakeDb {
       const [key, value] = params as [string, string];
       this.meta.set(key, value);
       return { changes: 1 };
+    }
+    // [wb修改] 成交量单位归一：UPDATE kline_daily SET volume = ROUND(volume / ?, 2) WHERE code = ? AND volume > 0
+    if (/UPDATE kline_daily SET volume/i.test(sql)) {
+      const [factor, code] = params as [number, string];
+      let changes = 0;
+      for (const [k, b] of this.kline) {
+        if (b.code === code && b.volume > 0) {
+          this.kline.set(k, { ...b, volume: Math.round((b.volume / factor) * 100) / 100 });
+          changes++;
+        }
+      }
+      return { changes };
     }
     throw new Error(`FakeDb 不认识的 runAsync SQL: ${sql}`);
   }
@@ -107,7 +119,9 @@ function tencentFetchFor(barsByCode: Record<string, KlineDaily[]>): FetchLike {
     if (!m || !url.includes('gtimg')) return { ok: false, status: 500, json: async () => ({}) };
     const code = m[2];
     const bars = barsByCode[code] ?? [];
-    const rows = bars.map((b) => [b.date, String(b.open), String(b.close), String(b.high), String(b.low), String(b.volume)]);
+    // 腾讯原生 volume 单位是「股」：mock 里 bar 为万手（如 3），×1e6 模拟原始响应，
+    // 解析器 ÷1e6 还原为万手 → 本地/在线口径一致，不误触发成交量归一
+    const rows = bars.map((b) => [b.date, String(b.open), String(b.close), String(b.high), String(b.low), String(b.volume * 1000000)]);
     return {
       ok: true,
       status: 200,
@@ -256,6 +270,63 @@ describe('runFullSync', () => {
     });
     expect(summary.patchedStocks).toBe(0);
     expect(summary.insertedBars).toBe(0);
+  });
+
+  it('本地存量是「手」→ 自动归一万手后再写，新旧 bar 单位一致', async () => {
+    const db = new FakeDb();
+    db.seedStocks(['600000']);
+    // 本地存量是「手」口径（如 30000 手）
+    db.seedKline([
+      bar('600000', '2026-07-23', 9.05, 30000),
+      bar('600000', '2026-07-24', 9.04, 30000),
+      bar('600000', '2026-07-25', 9.0, 30000),
+    ]);
+    const online = [
+      bar('600000', '2026-07-23', 9.05, 3),
+      bar('600000', '2026-07-24', 9.04, 3),
+      bar('600000', '2026-07-25', 9.0, 3),
+      bar('600000', '2026-07-27', 9.05, 3),
+      bar('600000', '2026-07-28', 9.09, 3),
+    ];
+    const summary = await runFullSync(db.asDb(), undefined, {
+      fetchImpl: tencentFetchFor({ '600000': online }),
+      now: AFTER_CLOSE,
+    });
+    expect(summary.patchedStocks).toBe(1);
+    expect(summary.insertedBars).toBe(2);
+    // 本地存量已 ÷10000 归一，与新插入 bar 单位一致
+    expect(db.kline.get('600000|2026-07-24')!.volume).toBe(3);
+    expect(db.kline.get('600000|2026-07-28')!.volume).toBe(3);
+    // 归一只执行一次（幂等）
+    const updateCount = db.sqlLog.filter((s) => /UPDATE kline_daily SET volume/i.test(s)).length;
+    expect(updateCount).toBe(1);
+  });
+
+  it('本地已是万手（含 ±15% 噪声）→ 不触发归一，铁律保持', async () => {
+    const db = new FakeDb();
+    db.seedStocks(['600000']);
+    db.seedKline([
+      bar('600000', '2026-07-23', 9.05, 3),
+      bar('600000', '2026-07-24', 9.04, 3),
+      bar('600000', '2026-07-25', 9.0, 3),
+    ]);
+    const online = [
+      bar('600000', '2026-07-23', 9.05, 3),
+      bar('600000', '2026-07-24', 9.04, 3.2), // ±15% 内的噪声
+      bar('600000', '2026-07-25', 9.0, 3),
+      bar('600000', '2026-07-27', 9.05, 3),
+      bar('600000', '2026-07-28', 9.09, 3),
+    ];
+    const before = db.kline.size;
+    const summary = await runFullSync(db.asDb(), undefined, {
+      fetchImpl: tencentFetchFor({ '600000': online }),
+      now: AFTER_CLOSE,
+    });
+    expect(summary.rejected).toBe(false);
+    expect(db.sqlLog.some((s) => /UPDATE kline_daily SET volume/i.test(s))).toBe(false);
+    expect(db.kline.get('600000|2026-07-24')!.volume).toBe(3); // 原样
+    expect(db.hasDestructiveKlineSql()).toBe(false); // 铁律保持
+    expect(db.kline.size).toBe(before + 2);
   });
 
   it('复权基准不一致 → 该股 rejected 且零写入', async () => {

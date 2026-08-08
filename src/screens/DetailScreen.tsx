@@ -1,4 +1,4 @@
-import React, { useEffect, useState } from 'react';
+import React, { useCallback, useEffect, useState } from 'react';
 import { View, Text, StyleSheet, ScrollView, ActivityIndicator, TextInput, TouchableOpacity, Alert } from 'react-native';
 import { useRoute } from '@react-navigation/native';
 import { useDatabase, KlineDaily, Stock } from '../database/SQLiteProvider';
@@ -7,6 +7,7 @@ import { analyzeStock, StockAnalysis } from '../strategies/StrategyEngine';
 import KlineChart from '../components/KlineChart';
 import ErrorBoundary from '../components/ErrorBoundary';
 import { KlineFiller } from '../services/KlineFiller';
+import { importNewStock } from '../services/StockImporter';
 
 function StarRating({ rating }: { rating: number }) {
   return (
@@ -57,13 +58,14 @@ export default function DetailScreen() {
   const [showNeutralStrategies, setShowNeutralStrategies] = useState(false);
   const [inputHistory, setInputHistory] = useState<string[]>([]);
 
-  useEffect(() => {
-    const loadStockList = async () => {
-      const stocks = await getStocks();
-      setStockList(stocks);
-    };
-    loadStockList();
+  const loadStockList = useCallback(async () => {
+    const stocks = await getStocks();
+    setStockList(stocks);
   }, [getStocks]);
+
+  useEffect(() => {
+    loadStockList();
+  }, [loadStockList]);
 
   // 监听路由参数变化（从概览页点击跳转过来）
   useEffect(() => {
@@ -131,24 +133,41 @@ export default function DetailScreen() {
       Alert.alert('提示', '数据库未连接，请先导入数据库', [{ text: '确定' }]);
       return;
     }
+    const target = code.trim();
+    if (!target) return;
     setIsFilling(true);
     setFillResult('');
     try {
-      const result = await filler.fillSingle(code.trim(), db);
-      if (result.addedCount > 0) {
-        setFillResult(`新增 ${result.addedCount} 条K线 (${result.source})`);
-        // 补齐后刷新 K 线数据
-        await loadKlineData();
-      } else if (result.success) {
-        setFillResult('已是最新数据');
+      // 新股票（本地无K线）：联网拉全量历史 → 入库 → 自动完成策略分析
+      const localRow = await db.getFirstAsync<{ c: number }>(
+        'SELECT COUNT(*) AS c FROM kline_daily WHERE code = ?',
+        [target]
+      );
+      if (!localRow || localRow.c === 0) {
+        const result = await importNewStock(db, target);
+        await Promise.all([loadStockList(), loadKlineData()]);
+        setFillResult(`导入成功：${result.name || result.code}，新增 ${result.insertedBars} 根K线 (${result.source})`);
       } else {
-        setFillResult(`补齐失败: ${result.error}`);
-        Alert.alert('补齐失败', result.error || '未知错误', [{ text: '确定' }]);
+        // 库内已有：增量补齐缺失交易日（KlineFetcher 万手归一，与桌面版口径一致）
+        // force=true 强制绕过 FillCache：即使已是最新也要走一次真实拉取，
+        // 让「成交量单位自动归一」能执行（幂等；否则缓存命中时存量永远得不到清洗）
+        const result = await filler.fillSingle(target, db, true);
+        if (result.addedCount > 0) {
+          setFillResult(`新增 ${result.addedCount} 条K线 (${result.source})`);
+        } else if (result.success) {
+          setFillResult('已是最新数据');
+        } else {
+          setFillResult(`补齐失败: ${result.error}`);
+          Alert.alert('补齐失败', result.error || '未知错误', [{ text: '确定' }]);
+        }
+        // 无论新增与否都刷新：归一化可能改写了存量行（volume 已归一万手）
+        await loadKlineData();
       }
     } catch (error: any) {
-      console.error('Fill single failed:', error);
-      setFillResult(`补齐异常: ${error?.message || '未知错误'}`);
-      Alert.alert('补齐失败', error?.message || '未知错误', [{ text: '确定' }]);
+      console.error('Update stock failed:', error);
+      const msg = error?.message || '未知错误';
+      setFillResult(`更新失败: ${msg}`);
+      Alert.alert('更新失败', msg, [{ text: '确定' }]);
     } finally {
       setIsFilling(false);
       // 3秒后自动清除结果提示
@@ -178,7 +197,7 @@ export default function DetailScreen() {
               disabled={isFilling}
             >
               <Text style={styles.fillBtnText}>
-                {isFilling ? '补齐中...' : '补齐此股'}
+                {isFilling ? '更新中...' : '联网更新'}
               </Text>
             </TouchableOpacity>
           </View>

@@ -36,3 +36,6 @@ yarn-error.*
 # SQLite (大文件不入库)
 kline_5y_bigdemo.sqlite
 kline_1y_smalldemo.sqlite
+
+# Native build artifacts (expo prebuild 产物，可本地重建)
+android/

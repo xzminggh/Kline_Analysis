@@ -2,21 +2,26 @@
  * 补齐业务编排 (KlineFiller)
  *
  * 设计原则：
- * 1. 编排层：协调 tradingCalendar + QuoteFetcher + FillCache + SQLiteProvider
+ * 1. 编排层：协调 tradingCalendar + KlineFetcher + FillCache + SQLiteProvider
  * 2. 单股补齐：查询最新日期 → 计算缺失交易日 → 拉取 → 写入 → 更新缓存
  * 3. 批量补齐：遍历股票列表，逐只补齐
  * 4. 互斥锁：isFilling 防止并发补齐同一批次
  * 5. 熔断：连续失败 > 3 次则暂停当前批次
+ *
+ * [wb修改] 2026-08 更换数据源：自 QuoteFetcher 切换为 KlineFetcher（三源降级 + volume 归一化「万手」）。
+ *  旧路径把腾讯/新浪原生「股」、东财「手」直接写入万手库，导致详情页图表与桌面版 SQLite 单位不一致；
+ *  新路径与 SyncService/StockImporter 共用同一归一化口径，且只补缺失交易日（绝不覆盖已有历史）。
  */
 
 import { KlineDaily } from '../database/SQLiteProvider';
-import { fetchKline, FetchResult } from './QuoteFetcher';
+import { fetchDailyKline, type FetchResult } from './KlineFetcher';
 import { FillCache } from './FillCache';
 import {
   isTradingDay,
   getLastTradingDay,
   getMissingTradingDays,
 } from '../utils/tradingCalendar';
+import { detectVolumeFactor, normalizeStockVolume } from './VolumeUnitNormalizer';
 
 export interface FillerProgress {
   current: number;
@@ -102,20 +107,43 @@ export class KlineFiller {
         return { code, success: true, addedCount: 0, source: 'up-to-date' };
       }
 
-      // 4. 拉取行情数据
-      const fetchResult = await fetchKline(code, missingDays[0], missingDays[missingDays.length - 1]);
-      if (!fetchResult.success) {
+      // 4. 拉取行情数据（KlineFetcher 三源降级，volume 已统一为「万手」，与 db 一致）
+      const missingDaySet = new Set(missingDays);
+      let fetchResult: FetchResult;
+      try {
+        const fetchDays = Math.min(1000, Math.max(120, missingDays.length + 30));
+        const result = await fetchDailyKline(code, fetchDays, undefined, 'raw');
+        fetchResult = result;
+      } catch (fetchErr: any) {
         this.consecutiveFailures++;
         return {
           code,
           success: false,
           addedCount: 0,
-          error: fetchResult.error || '拉取失败',
+          error: fetchErr?.message || String(fetchErr),
         };
       }
 
-      // 5. 写入数据库
-      const klines = fetchResult.data;
+      // [wb修改] 成交量单位自动归一：本地存量若为「手/股」，以在线万手为基准整体归一万手，
+      // 避免同一股票新旧 bar 单位混存（检测不到差异则不动；幂等，已归一的不会二次清洗）
+      try {
+        const localRecent = (await db.getAllAsync(
+          `SELECT code, date, open, high, low, close, volume, amount
+           FROM kline_daily WHERE code = ? ORDER BY date DESC LIMIT 15`,
+          [code]
+        )) as KlineDaily[];
+        const volFactor = detectVolumeFactor(localRecent, fetchResult.bars);
+        if (volFactor && volFactor !== 1) {
+          await normalizeStockVolume(db, code, volFactor);
+          console.log(`[KlineFiller] ${code} 成交量单位自动归一（÷${volFactor}，旧bar为${volFactor === 10000 ? '手' : '股'}口径）`);
+        }
+      } catch (normErr: any) {
+        // 归一失败不影响主流程（只是旧 bar 单位不统一，可后续补齐时再修）
+        console.warn(`[KlineFiller] ${code} 成交量单位归一失败，跳过:`, normErr?.message || String(normErr));
+      }
+
+      // 5. 只保留缺失交易日（绝不覆盖已有历史）
+      const klines = fetchResult.bars.filter((b) => missingDaySet.has(b.date));
       if (klines.length === 0) {
         // 停牌或空数据，更新缓存避免重复拉取
         this.cache.set(code, today);

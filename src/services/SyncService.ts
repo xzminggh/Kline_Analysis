@@ -18,6 +18,7 @@
 import type { SQLiteDatabase } from 'expo-sqlite';
 import type { KlineDaily } from '../database/SQLiteProvider';
 import { fetchDailyKline, AllSourcesFailedError, DEFAULT_FETCH_DAYS, type FetchLike, type AdjustMode } from './KlineFetcher';
+import { detectVolumeFactor, normalizeStockVolume } from './VolumeUnitNormalizer';
 
 /** 单只股票的同步游标（本地最后一根K线日期） */
 export interface SyncCursor {
@@ -223,6 +224,8 @@ export async function runFullSync(
           // 适配用户 DB 可能是不复权或前复权两种格式，无需手动配置
           const ADJUST_MODES: AdjustMode[] = ['raw', 'qfq'];
           let lastRejectError: string | undefined;
+          // [wb修改] 成交量单位归一只执行一次（幂等；qfq 重试轮不再重复清洗）
+          let volumeNormalized = false;
 
           for (const mode of ADJUST_MODES) {
             const { bars: onlineBarsRaw, source } = await fetchDailyKline(
@@ -240,6 +243,16 @@ export async function runFullSync(
                FROM kline_daily WHERE code = ? AND date >= ? ORDER BY date ASC`,
               [cursor.code, minOnlineDate]
             );
+
+            // [wb修改] 成交量单位自动归一：本地存量若为「手/股」，以在线万手为基准整体归一万手，
+            // 避免同一股票新旧 bar 单位混存破坏 K线图/表格（检测不到差异则不动）
+            if (!volumeNormalized) {
+              const factor = detectVolumeFactor(localBars, onlineBars);
+              if (factor && factor !== 1) {
+                await normalizeStockVolume(db, cursor.code, factor);
+                volumeNormalized = true;
+              }
+            }
 
             // 复权基准校验（重叠不足时放行）
             if (!checkAdjustBasis(localBars, onlineBars)) {

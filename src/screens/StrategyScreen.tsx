@@ -400,6 +400,13 @@ const styles = StyleSheet.create({
     borderRadius: 8,
     marginBottom: 8,
   },
+  // [wb修改] resultHeader：重构时误删了仍在 JSX 引用的样式，补回（与原布局一致）
+  resultHeader: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'flex-start',
+    marginBottom: 8,
+  },
   resultItemHeader: {
     flexDirection: 'row',
     justifyContent: 'space-between',

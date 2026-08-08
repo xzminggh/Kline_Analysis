@@ -1,17 +1,19 @@
 /**
  * KlineFiller 单元测试
+ * [wb修改] 2026-08 数据源自 QuoteFetcher 切换为 KlineFetcher（万手归一化），
+ *   mock 结构与抛错语义随之更新：fetchDailyKline 返回 { bars, source }，失败时抛错。
  */
 
 import { KlineFiller, FillResult } from './KlineFiller';
 import { FillCache } from './FillCache';
 import { KlineDaily } from '../database/SQLiteProvider';
 
-// 模拟 QuoteFetcher
-jest.mock('./QuoteFetcher', () => ({
-  fetchKline: jest.fn(),
+// 模拟 KlineFetcher（三源降级、万手归一）
+jest.mock('./KlineFetcher', () => ({
+  fetchDailyKline: jest.fn(),
 }));
 
-import { fetchKline } from './QuoteFetcher';
+import { fetchDailyKline } from './KlineFetcher';
 
 // 模拟 tradingCalendar
 jest.mock('../utils/tradingCalendar', () => ({
@@ -32,8 +34,9 @@ jest.mock('../utils/tradingCalendar', () => ({
   }),
 }));
 
-function createMockDb(rows: Record<string, any> = {}) {
+function createMockDb(rows: Record<string, any> = {}, recentBars: Record<string, KlineDaily[]> = {}) {
   const dbRows: Record<string, any> = { ...rows };
+  const recent: Record<string, KlineDaily[]> = { ...recentBars };
   return {
     getFirstAsync: jest.fn(async (sql: string, params?: any[]) => {
       if (sql.includes('MAX(date)')) {
@@ -43,11 +46,16 @@ function createMockDb(rows: Record<string, any> = {}) {
       return null;
     }),
     runAsync: jest.fn(async () => ({ changes: 1 })),
-    getAllAsync: jest.fn(async () => []),
+    getAllAsync: jest.fn(async (sql: string, params?: any[]) => {
+      if (sql.includes('ORDER BY date DESC LIMIT 15')) {
+        return recent[params?.[0]] || [];
+      }
+      return [];
+    }),
   };
 }
 
-function mockKlines(code: string, dates: string[]): KlineDaily[] {
+function mockKlines(code: string, dates: string[], volume = 100.0): KlineDaily[] {
   return dates.map((date) => ({
     code,
     date,
@@ -55,7 +63,7 @@ function mockKlines(code: string, dates: string[]): KlineDaily[] {
     high: 110,
     low: 90,
     close: 105,
-    volume: 1000000,
+    volume, // 默认万手（KlineFetcher 归一化口径）
     amount: 105000000,
   }));
 }
@@ -112,11 +120,10 @@ describe('KlineFiller', () => {
     expect(result.addedCount).toBe(0);
   });
 
-  it('拉取成功并写入数据', async () => {
+  it('拉取成功并写入数据（只写缺失交易日）', async () => {
     mockDb = createMockDb({ '600519': '2026-07-24' });
-    (fetchKline as jest.Mock).mockResolvedValue({
-      success: true,
-      data: mockKlines('600519', ['2026-07-25', '2026-07-26', '2026-07-27']),
+    (fetchDailyKline as jest.Mock).mockResolvedValue({
+      bars: mockKlines('600519', ['2026-07-25', '2026-07-26', '2026-07-27']),
       source: 'tencent',
     });
 
@@ -130,12 +137,7 @@ describe('KlineFiller', () => {
 
   it('拉取失败时返回错误并累计失败次数', async () => {
     mockDb = createMockDb({ '600519': '2026-07-24' });
-    (fetchKline as jest.Mock).mockResolvedValue({
-      success: false,
-      data: [],
-      source: 'none',
-      error: '网络错误',
-    });
+    (fetchDailyKline as jest.Mock).mockRejectedValue(new Error('网络错误'));
 
     const result = await filler.fillSingle('600519', mockDb);
 
@@ -145,9 +147,8 @@ describe('KlineFiller', () => {
 
   it('停牌返回空数据时不报错', async () => {
     mockDb = createMockDb({ '600519': '2026-07-24' });
-    (fetchKline as jest.Mock).mockResolvedValue({
-      success: true,
-      data: [],
+    (fetchDailyKline as jest.Mock).mockResolvedValue({
+      bars: [],
       source: 'tencent',
     });
 
@@ -161,9 +162,8 @@ describe('KlineFiller', () => {
   it('force=true 时忽略缓存', async () => {
     filler.getCache().set('600519', '2026-07-28');
     mockDb = createMockDb({ '600519': '2026-07-24' });
-    (fetchKline as jest.Mock).mockResolvedValue({
-      success: true,
-      data: mockKlines('600519', ['2026-07-25']),
+    (fetchDailyKline as jest.Mock).mockResolvedValue({
+      bars: mockKlines('600519', ['2026-07-25']),
       source: 'tencent',
     });
 
@@ -175,9 +175,8 @@ describe('KlineFiller', () => {
 
   it('数据库查询失败时继续执行（lastDate 为 null）', async () => {
     mockDb = createMockDb(); // 无数据
-    (fetchKline as jest.Mock).mockResolvedValue({
-      success: true,
-      data: mockKlines('600519', ['2026-07-28']),
+    (fetchDailyKline as jest.Mock).mockResolvedValue({
+      bars: mockKlines('600519', ['2026-07-28']),
       source: 'tencent',
     });
 
@@ -187,13 +186,67 @@ describe('KlineFiller', () => {
     expect(result.addedCount).toBe(1);
   });
 
+  it('拉取返回的已存在日期不会重复写入', async () => {
+    mockDb = createMockDb({ '600519': '2026-07-24' });
+    (fetchDailyKline as jest.Mock).mockResolvedValue({
+      bars: mockKlines('600519', ['2026-07-20', '2026-07-25', '2026-07-26']),
+      source: 'tencent',
+    });
+
+    const result = await filler.fillSingle('600519', mockDb);
+
+    // 07-20 不在缺失集合内，不应写入
+    expect(result.success).toBe(true);
+    expect(result.addedCount).toBe(2);
+  });
+
+  it('本地存量是「手」→ 自动归一万手后再写缺失bar（新旧单位一致）', async () => {
+    // 本地近 15 根（24、25、26 与在线重叠）是「手」口径：100万手 = 1,000,000 手
+    mockDb = createMockDb(
+      { '600519': '2026-07-24' },
+      { '600519': mockKlines('600519', ['2026-07-24', '2026-07-25', '2026-07-26'], 1000000) }
+    );
+    (fetchDailyKline as jest.Mock).mockResolvedValue({
+      bars: mockKlines('600519', ['2026-07-25', '2026-07-26', '2026-07-27']), // 100 万手
+      source: 'tencent',
+    });
+
+    const result = await filler.fillSingle('600519', mockDb);
+
+    expect(result.success).toBe(true);
+    expect(result.addedCount).toBe(3);
+    const updateCalls = mockDb.runAsync.mock.calls.filter(
+      (c: any[]) => /UPDATE kline_daily SET volume/i.test(String(c[0]))
+    );
+    expect(updateCalls).toHaveLength(1);
+    expect(updateCalls[0][1]).toEqual([10000, '600519']);
+  });
+
+  it('本地已是万手 → 不触发归一', async () => {
+    mockDb = createMockDb(
+      { '600519': '2026-07-24' },
+      { '600519': mockKlines('600519', ['2026-07-25', '2026-07-26'], 100) }
+    );
+    (fetchDailyKline as jest.Mock).mockResolvedValue({
+      bars: mockKlines('600519', ['2026-07-25', '2026-07-26', '2026-07-27']),
+      source: 'tencent',
+    });
+
+    const result = await filler.fillSingle('600519', mockDb);
+
+    expect(result.success).toBe(true);
+    const updateCalls = mockDb.runAsync.mock.calls.filter(
+      (c: any[]) => /UPDATE kline_daily SET volume/i.test(String(c[0]))
+    );
+    expect(updateCalls).toHaveLength(0);
+  });
+
   // ==================== fillBatch ====================
 
   it('批量补齐多只', async () => {
     mockDb = createMockDb({ '600519': '2026-07-24', '000001': '2026-07-24' });
-    (fetchKline as jest.Mock).mockResolvedValue({
-      success: true,
-      data: mockKlines('any', ['2026-07-25', '2026-07-26', '2026-07-27']),
+    (fetchDailyKline as jest.Mock).mockResolvedValue({
+      bars: mockKlines('any', ['2026-07-25', '2026-07-26', '2026-07-27']),
       source: 'tencent',
     });
 
@@ -207,10 +260,10 @@ describe('KlineFiller', () => {
 
   it('并发补齐时拒绝新请求', async () => {
     mockDb = createMockDb({ '600519': '2026-07-24' });
-    (fetchKline as jest.Mock).mockImplementation(
+    (fetchDailyKline as jest.Mock).mockImplementation(
       () =>
         new Promise((resolve) => {
-          setTimeout(() => resolve({ success: true, data: [], source: 'tencent' }), 100);
+          setTimeout(() => resolve({ bars: [], source: 'tencent' }), 100);
         })
     );
 
@@ -233,12 +286,7 @@ describe('KlineFiller', () => {
       '300001': '2026-07-24',
       '688001': '2026-07-24',
     });
-    (fetchKline as jest.Mock).mockResolvedValue({
-      success: false,
-      data: [],
-      source: 'none',
-      error: '网络错误',
-    });
+    (fetchDailyKline as jest.Mock).mockRejectedValue(new Error('网络错误'));
 
     const result = await filler.fillBatch(['600519', '000001', '300001', '688001'], mockDb);
 
@@ -250,9 +298,8 @@ describe('KlineFiller', () => {
 
   it('批量补齐进度回调', async () => {
     mockDb = createMockDb({ '600519': '2026-07-24' });
-    (fetchKline as jest.Mock).mockResolvedValue({
-      success: true,
-      data: mockKlines('any', ['2026-07-25']),
+    (fetchDailyKline as jest.Mock).mockResolvedValue({
+      bars: mockKlines('any', ['2026-07-25']),
       source: 'tencent',
     });
 
@@ -270,10 +317,10 @@ describe('KlineFiller', () => {
     expect(filler.getIsFilling()).toBe(false);
 
     mockDb = createMockDb({ '600519': '2026-07-24' });
-    (fetchKline as jest.Mock).mockImplementation(
+    (fetchDailyKline as jest.Mock).mockImplementation(
       () =>
         new Promise((resolve) => {
-          setTimeout(() => resolve({ success: true, data: [], source: 'tencent' }), 50);
+          setTimeout(() => resolve({ bars: [], source: 'tencent' }), 50);
         })
     );
 
